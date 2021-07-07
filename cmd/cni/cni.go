@@ -24,16 +24,13 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/vishvananda/netlink"
-
-	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
-
-	"github.com/oecp/rama/pkg/request"
-
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
+	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	"github.com/oecp/rama/pkg/request"
+	"github.com/vishvananda/netlink"
 )
 
 func init() {
