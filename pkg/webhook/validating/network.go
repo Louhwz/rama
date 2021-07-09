@@ -45,7 +45,7 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 
 	switch ramav1.GetNetworkType(network) {
 	case ramav1.NetworkTypeUnderlay:
-		if network.Spec.NodeSelector == nil || len(network.Spec.NodeSelector) == 0 {
+		if len(network.Spec.NodeSelector) == 0 {
 			return admission.Denied("must have node selector")
 		}
 	case ramav1.NetworkTypeOverlay:
@@ -61,7 +61,7 @@ func NetworkCreateValidation(ctx context.Context, req *admission.Request, handle
 		}
 
 		// check node selector
-		if network.Spec.NodeSelector != nil && len(network.Spec.NodeSelector) > 0 {
+		if len(network.Spec.NodeSelector) > 0 {
 			return admission.Denied("must not assign node selector for overlay network")
 		}
 
@@ -93,7 +93,7 @@ func NetworkUpdateValidation(ctx context.Context, req *admission.Request, handle
 	switch ramav1.GetNetworkType(newN) {
 	case ramav1.NetworkTypeUnderlay:
 	case ramav1.NetworkTypeOverlay:
-		if newN.Spec.NodeSelector != nil && len(newN.Spec.NodeSelector) > 0 {
+		if len(newN.Spec.NodeSelector) > 0 {
 			return admission.Denied("node selector must not be assigned for overlay network")
 		}
 	default:

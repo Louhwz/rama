@@ -40,8 +40,8 @@ type Device struct {
 	remoteIPToMacMap map[string]net.HardwareAddr
 }
 
-func NewVxlanDevice(name string, vxlanID int, parent string, localAddr net.IP, port int, baseReachableTime time.Duration,
-	learning bool) (*Device, error) {
+func NewVxlanDevice(name string, vxlanID int, parent string, localAddr net.IP,
+	port int, baseReachableTime time.Duration, learning bool) (*Device, error) {
 	parentLink, err := netlink.LinkByName(parent)
 	if err != nil {
 		return nil, fmt.Errorf("get parent link %v failed: %v", parent, err)

@@ -111,7 +111,9 @@ func PodCreateMutation(ctx context.Context, req *admission.Request, handler *Han
 		}
 	}
 
-	var networkType = ipamtypes.ParseNetworkTypeFromString(utils.PickFirstNonEmptyString(pod.Annotations[constants.AnnotationNetworkType], pod.Labels[constants.LabelNetworkType]))
+	var networkType = ipamtypes.ParseNetworkTypeFromString(utils.PickFirstNonEmptyString(
+		pod.Annotations[constants.AnnotationNetworkType],
+		pod.Labels[constants.LabelNetworkType]))
 	if len(networkName) > 0 {
 		network := &ramav1.Network{}
 		if err = handler.Client.Get(ctx, types.NamespacedName{Name: networkName}, network); err != nil {
