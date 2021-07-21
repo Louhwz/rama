@@ -25,8 +25,10 @@ import (
 )
 
 // IPInstanceLister helps list IPInstances.
+// All objects returned here must be treated as read-only.
 type IPInstanceLister interface {
 	// List lists all IPInstances in the indexer.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.IPInstance, err error)
 	// IPInstances returns an object that can list and get IPInstances.
 	IPInstances(namespace string) IPInstanceNamespaceLister
@@ -57,10 +59,13 @@ func (s *iPInstanceLister) IPInstances(namespace string) IPInstanceNamespaceList
 }
 
 // IPInstanceNamespaceLister helps list and get IPInstances.
+// All objects returned here must be treated as read-only.
 type IPInstanceNamespaceLister interface {
 	// List lists all IPInstances in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1.IPInstance, err error)
 	// Get retrieves the IPInstance from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
 	Get(name string) (*v1.IPInstance, error)
 	IPInstanceNamespaceListerExpansion
 }

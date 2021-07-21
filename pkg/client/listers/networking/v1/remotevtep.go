@@ -24,44 +24,44 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// SubnetLister helps list Subnets.
+// RemoteVtepLister helps list RemoteVteps.
 // All objects returned here must be treated as read-only.
-type SubnetLister interface {
-	// List lists all Subnets in the indexer.
+type RemoteVtepLister interface {
+	// List lists all RemoteVteps in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.Subnet, err error)
-	// Get retrieves the Subnet from the index for a given name.
+	List(selector labels.Selector) (ret []*v1.RemoteVtep, err error)
+	// Get retrieves the RemoteVtep from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1.Subnet, error)
-	SubnetListerExpansion
+	Get(name string) (*v1.RemoteVtep, error)
+	RemoteVtepListerExpansion
 }
 
-// subnetLister implements the SubnetLister interface.
-type subnetLister struct {
+// remoteVtepLister implements the RemoteVtepLister interface.
+type remoteVtepLister struct {
 	indexer cache.Indexer
 }
 
-// NewSubnetLister returns a new SubnetLister.
-func NewSubnetLister(indexer cache.Indexer) SubnetLister {
-	return &subnetLister{indexer: indexer}
+// NewRemoteVtepLister returns a new RemoteVtepLister.
+func NewRemoteVtepLister(indexer cache.Indexer) RemoteVtepLister {
+	return &remoteVtepLister{indexer: indexer}
 }
 
-// List lists all Subnets in the indexer.
-func (s *subnetLister) List(selector labels.Selector) (ret []*v1.Subnet, err error) {
+// List lists all RemoteVteps in the indexer.
+func (s *remoteVtepLister) List(selector labels.Selector) (ret []*v1.RemoteVtep, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.Subnet))
+		ret = append(ret, m.(*v1.RemoteVtep))
 	})
 	return ret, err
 }
 
-// Get retrieves the Subnet from the index for a given name.
-func (s *subnetLister) Get(name string) (*v1.Subnet, error) {
+// Get retrieves the RemoteVtep from the index for a given name.
+func (s *remoteVtepLister) Get(name string) (*v1.RemoteVtep, error) {
 	obj, exists, err := s.indexer.GetByKey(name)
 	if err != nil {
 		return nil, err
 	}
 	if !exists {
-		return nil, errors.NewNotFound(v1.Resource("subnet"), name)
+		return nil, errors.NewNotFound(v1.Resource("remotevtep"), name)
 	}
-	return obj.(*v1.Subnet), nil
+	return obj.(*v1.RemoteVtep), nil
 }
