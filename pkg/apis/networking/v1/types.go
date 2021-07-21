@@ -174,3 +174,120 @@ type NetworkList struct {
 
 	Items []Network `json:"items"`
 }
+
+// +genclient
+// +genclient:nonNamespaced
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +k8s:openapi-gen=true
+
+// RemoteCluster is a specification for a RemoteCluster resource
+type RemoteCluster struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   RemoteClusterSpec   `json:"spec"`
+	Status RemoteClusterStatus `json:"status"`
+}
+
+// RemoteClusterSpec is the spec for a RemoteCluster resource
+type RemoteClusterSpec struct {
+	ClusterID  uint32              `json:"cluster_id"`
+	ConnConfig ApiServerConnConfig `json:"conn_config"`
+}
+
+type ApiServerConnConfig struct {
+	// https:ip:port
+	Server   string `json:"endpoints"`
+	CertData []byte `json:"cert_data"`
+	KeyData  []byte `json:"key_data"`
+}
+
+// RemoteClusterStatus is the status for a RemoteCluster resource
+type RemoteClusterStatus struct {
+	Up bool `json:"up"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// RemoteClusterList is a list of RemoteCluster resources
+type RemoteClusterList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []RemoteCluster `json:"items"`
+}
+
+// +genclient
+// +genclient:nonNamespaced
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +k8s:openapi-gen=true
+
+// RemoteSubnet is a specification for a RemoteSubnet resource
+type RemoteSubnet struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   RemoteSubnetSpec   `json:"spec"`
+	Status RemoteSubnetStatus `json:"status"`
+}
+
+// RemoteSubnetSpec is the spec for a RemoteSubnet resource
+type RemoteSubnetSpec struct {
+	Version   IPVersion   `json:"version"`
+	CIDR      string      `json:"cidr"`
+	Type      NetworkType `json:"type,omitempty"`
+	ClusterID uint32      `json:"cluster_id"`
+}
+
+// RemoteSubnetStatus is the status for a RemoteSubnet resource
+type RemoteSubnetStatus struct {
+	SubnetStatus
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// RemoteSubnetList is a list of RemoteSubnetList resources
+type RemoteSubnetList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []RemoteSubnet `json:"items"`
+}
+
+// +genclient
+// +genclient:nonNamespaced
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +k8s:openapi-gen=true
+
+// RemoteVtep is a specification for a RemoteVtep resource
+type RemoteVtep struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   RemoteVtepSpec   `json:"spec"`
+	Status RemoteVtepStatus `json:"status"`
+}
+
+// RemoteVtepSpec is the spec for a RemoteVtep resource
+type RemoteVtepSpec struct {
+	ClusterID uint32 `json:"cluster_id"`
+	NodeName  string `json:"node_name"`
+	VtepIP    string `json:"vtep_ip"`
+	VtepMAC   string `json:"vtep_mac"`
+}
+
+// RemoteVtepStatus is the status for a RemoteVtep resource
+type RemoteVtepStatus struct {
+	PodIPList      []string `json:"pod_ip_list"`
+	LastModifyTime string   `json:"last_modify_time"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// RemoteVtepList is a list of RemoteVtepList resources
+type RemoteVtepList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []RemoteVtep `json:"items"`
+}
