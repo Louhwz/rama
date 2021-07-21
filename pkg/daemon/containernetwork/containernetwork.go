@@ -35,6 +35,7 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
+// ConfigureHostNic 向39999表里写路由
 func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo, localDirectTableNum int) error {
 	hostLink, err := netlink.LinkByName(nicName)
 	if err != nil {
@@ -137,7 +138,7 @@ func ConfigureHostNic(nicName string, allocatedIPs map[ramav1.IPVersion]*IPInfo,
 		if err := netlink.RouteReplace(localPodRoute); err != nil {
 			return fmt.Errorf("add route %v failed: %v", localPodRoute.String(), err)
 		}
-
+		// todo 为什么只有ipv6的需要？
 		if err := netlink.NeighAdd(&netlink.Neigh{
 			LinkIndex: hostLink.Attrs().Index,
 			Family:    netlink.FAMILY_V6,
@@ -339,8 +340,10 @@ func ConfigureContainerNic(containerNicName, hostNicName, nodeIfName string, all
 	return nil
 }
 
-func GenerateContainerVethPair(containerID string) (string, string) {
-	return fmt.Sprintf("%s%s", containerID[0:12], ContainerHostLinkSuffix), fmt.Sprintf("%s%s", containerID[0:12], ContainerInitLinkSuffix)
+func GenerateContainerVethPair(containerID string) (hostNicName string, containerNicName string) {
+	hostNicName = fmt.Sprintf("%s%s", containerID[0:12], ContainerHostLinkSuffix)
+	containerNicName = fmt.Sprintf("%s%s", containerID[0:12], ContainerInitLinkSuffix)
+	return
 }
 
 func ensureRpFilterConfigs(containerHostIf string) error {

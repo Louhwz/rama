@@ -139,8 +139,7 @@ func (cdh cniDaemonHandler) handleAdd(req *restful.Request, resp *restful.Respon
 			if netID == nil && macAddr == "" {
 				netID = ipInstance.Spec.Address.NetID
 				macAddr = ipInstance.Spec.Address.MAC
-			} else if (netID != ipInstance.Spec.Address.NetID &&
-				(netID != nil && *netID != *ipInstance.Spec.Address.NetID)) ||
+			} else if (netID != ipInstance.Spec.Address.NetID && (netID != nil && *netID != *ipInstance.Spec.Address.NetID)) ||
 				macAddr != ipInstance.Spec.Address.MAC {
 
 				errMsg := fmt.Errorf("mac and netId for all ip instances of pod %v/%v should be the same", podRequest.PodNamespace, podRequest.PodName)

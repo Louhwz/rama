@@ -1,0 +1,12 @@
+apiVersion: networking.alibaba.com/v1
+kind: Subnet
+metadata:
+  name: overlay-subnet2
+spec:
+  network: overlay-network
+  range:
+    version: "4"
+    cidr: "10.14.101.0/24"
+    gateway: "10.14.101.1"
+  config:
+    autoNatOutgoing: true

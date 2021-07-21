@@ -8,22 +8,26 @@ require (
 	github.com/coreos/go-iptables v0.4.5
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/emicklei/go-restful v2.9.5+incompatible
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/google/uuid v1.1.2 // indirect
 	github.com/heptiolabs/healthcheck v0.0.0-20180807145615-6ff867650f40
 	github.com/mdlayher/ethernet v0.0.0-20190606142754-0394541c37b7
 	github.com/mdlayher/ndp v0.0.0-20200602162440-17ab9e3e5567
 	github.com/mdlayher/raw v0.0.0-20190606142536-fef19f00fc18
 	github.com/parnurzeal/gorequest v0.2.16
-	github.com/prometheus/client_golang v1.0.0
-	github.com/sirupsen/logrus v1.4.2
+	github.com/prometheus/client_golang v1.11.0
+	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/pflag v1.0.5
+	github.com/stretchr/testify v1.7.0
 	github.com/vishvananda/netlink v1.1.0
 	github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df
-	go.uber.org/atomic v1.5.1 // indirect
-	go.uber.org/multierr v1.4.0 // indirect
-	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
-	golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6 // indirect
-	golang.org/x/sys v0.0.0-20200602100848-8d3cce7afc34
+	go.uber.org/zap v1.17.0 // indirect
+	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4 // indirect
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
+	golang.org/x/sys v0.0.0-20210603081109-ebe580a85c40
+	golang.org/x/text v0.3.5 // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0 // indirect
 	k8s.io/api v0.18.15
@@ -31,18 +35,8 @@ require (
 	k8s.io/apiserver v0.20.4
 	k8s.io/client-go v0.18.15
 	k8s.io/component-base v0.20.4
-	k8s.io/csi-translation-lib v0.18.15 // indirect
 	k8s.io/klog v1.0.0
-	k8s.io/kube-aggregator v0.18.15 // indirect
-	k8s.io/kube-controller-manager v0.18.15 // indirect
-	k8s.io/kube-proxy v0.18.15 // indirect
-	k8s.io/kube-scheduler v0.18.15 // indirect
-	k8s.io/kubectl v0.18.15 // indirect
-	k8s.io/kubelet v0.18.15 // indirect
 	k8s.io/kubernetes v0.0.0-00010101000000-000000000000
-	k8s.io/legacy-cloud-providers v0.18.15 // indirect
-	k8s.io/metrics v0.18.15 // indirect
-	k8s.io/sample-apiserver v0.18.15 // indirect
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
 	moul.io/http2curl v1.0.0 // indirect
 	sigs.k8s.io/controller-runtime v0.6.5

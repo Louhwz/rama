@@ -110,6 +110,7 @@ func (cdh cniDaemonHandler) deleteNic(netns string) error {
 	})
 }
 
+// 创建veth设备，并且把这对设备放到宿主机的netns上
 func initContainerNic(podName, netns, containerID string, mtu int) (string, string, ns.NetNS, error) {
 	podNS, err := ns.GetNS(netns)
 	if err != nil {

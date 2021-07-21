@@ -241,6 +241,7 @@ func (s *SubnetSlice) DualStackUsage() ([3]*Usage, map[string]*Usage, error) {
 	return usage, subnetUsage, nil
 }
 
+// 挑选合适的subnet网段
 func (s *SubnetSlice) classify() (onlyIPv4, onlyIPv6, pairedIPv4, pairedIPv6 []string) {
 	type netIDGroupedSubnets struct {
 		v4Subnets []string

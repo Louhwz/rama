@@ -118,6 +118,11 @@ func (c *Controller) enqueueUpdateNode(oldObj, newObj interface{}) {
 	}
 }
 
+func (c *Controller) runNodeWorker() {
+	for c.processNextNodeWorkItem() {
+	}
+}
+
 func (c *Controller) processNextNodeWorkItem() bool {
 	obj, shutdown := c.nodeQueue.Get()
 
@@ -146,11 +151,6 @@ func (c *Controller) processNextNodeWorkItem() bool {
 		klog.Error(err)
 	}
 	return true
-}
-
-func (c *Controller) runNodeWorker() {
-	for c.processNextNodeWorkItem() {
-	}
 }
 
 func (c *Controller) reconcileNodeInfo() error {
@@ -196,12 +196,11 @@ func (c *Controller) reconcileNodeInfo() error {
 			break
 		}
 	}
-
+	// todo 这是用来干嘛的
 	thisNode, err := c.nodeLister.Get(c.config.NodeName)
 	if err != nil {
 		return fmt.Errorf("get this node %v object failed: %v", c.config.NodeName, err)
 	}
-
 	preVtepIP, exist := thisNode.Annotations[constants.AnnotationNodeVtepIP]
 	if exist {
 		// if vtep ip has been set and still exist on parent interface

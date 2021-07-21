@@ -105,7 +105,7 @@ func (n *Cache) UpdateNetworkCache(network *v1.Network) {
 	info := new(networkInfo)
 	if len(network.Spec.NodeSelector) > 0 {
 		info.selector = labels.SelectorFromSet(network.Spec.NodeSelector)
-		info.selectorRaw = labels.Set(network.Spec.NodeSelector)
+		info.selectorRaw = network.Spec.NodeSelector
 	}
 	if network.Status.Statistics != nil {
 		info.usage = &types.Usage{
