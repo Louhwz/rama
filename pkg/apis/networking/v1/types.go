@@ -191,20 +191,37 @@ type RemoteCluster struct {
 
 // RemoteClusterSpec is the spec for a RemoteCluster resource
 type RemoteClusterSpec struct {
-	ClusterID  uint32              `json:"cluster_id"`
-	ConnConfig ApiServerConnConfig `json:"conn_config"`
+	// globally unique id
+	ClusterID uint32 `json:"cluster_id"`
+	// just for human memory, no practical use
+	ClusterName string              `json:"cluster_name"`
+	ConnConfig  ApiServerConnConfig `json:"conn_config"`
 }
 
 type ApiServerConnConfig struct {
-	// https:ip:port
-	Server   string `json:"endpoints"`
-	CertData []byte `json:"cert_data"`
-	KeyData  []byte `json:"key_data"`
+	// apiServer address. Format: https://ip:port
+	Endpoint string `json:"endpoint"`
+	// Name of the secret containing the token required to access the
+	// member cluster. The secret needs to exist in the same namespace
+	// as the control plane and should have a "token" key.
+	SecretRef string `json:"secret_ref"`
+	// The maximum length of time to wait before giving up on a server
+	// request. A value of zero means no timeout. Default: zero second
+	Timeout uint32 `json:"timeout"`
 }
 
 // RemoteClusterStatus is the status for a RemoteCluster resource
 type RemoteClusterStatus struct {
-	Up bool `json:"up"`
+	// Type of cluster condition, Ready or Offline.
+	Status Status `json:"status"`
+	// Last time the condition was checked.
+	LastProbeTime metav1.Time `json:"lastProbeTime"`
+	// Last time the condition transit from one status to another.
+	// +optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+	// Human readable message indicating details about last transition.
+	// +optional
+	Message *string `json:"message,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

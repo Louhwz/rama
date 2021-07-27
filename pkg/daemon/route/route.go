@@ -246,6 +246,8 @@ func (m *Manager) SyncRoutes() error {
 		} else {
 			allValidUnderlaySubnet = append(allValidUnderlaySubnet, info.cidr)
 		}
+
+		allValidSubnet = append(allValidSubnet, info.cidr)
 	}
 
 	// Ensure overlay mark table rule if overlay interface exist.

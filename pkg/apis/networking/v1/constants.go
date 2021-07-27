@@ -36,3 +36,13 @@ const (
 	NetworkTypeUnderlay = NetworkType("Underlay")
 	NetworkTypeOverlay  = NetworkType("Overlay")
 )
+
+type Status string
+
+// These are valid conditions of a cluster.
+const (
+	// ClusterReady means the cluster is ready to accept workloads.
+	ClusterReady Status = "Ready"
+	// ClusterOffline means the cluster is temporarily down or not reachable
+	ClusterOffline Status = "Offline"
+)
