@@ -29,7 +29,7 @@ func (c *Controller) deleteRemoteCluster(obj interface{}) {
 
 func (c *Controller) updateRemoteCluster(oldObj, newObj interface{}) {
 	oldRC, _ := oldObj.(*v1.RemoteCluster)
-	newRC, _ := newObj.(v1.RemoteCluster)
+	newRC, _ := newObj.(*v1.RemoteCluster)
 
 	if oldRC.ResourceVersion == newRC.ResourceVersion {
 		return
@@ -52,7 +52,7 @@ func (c *Controller) reconcileRemoteCluster(key uint32) error {
 	remoteCluster, err := c.remoteClusterIndexer.ByIndex(ByRemoteClusterIDIndexer, clusterIDStr)
 	switch {
 	case err != nil && k8serror.IsNotFound(err):
-		return c.delRemoteClusterClient(key)
+		return c.delRemoteClusterManager(key)
 	case len(remoteCluster) != 1:
 		return errors.Newf("get more than one cluster for one cluster id. key=%v", key)
 	case len(remoteCluster) == 0:

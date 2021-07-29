@@ -10,7 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	jsoniter "github.com/json-iterator/go"
-	v1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
@@ -19,31 +18,6 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	clientconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 )
-
-func TestNewClusterClientSet(t *testing.T) {
-	config, err := clientconfig.GetConfig()
-	assert.Nil(t, err)
-	kubeClient := kubernetes.NewForConfigOrDie(config)
-	rc := &v1.RemoteCluster{
-		Spec: v1.RemoteClusterSpec{
-			ClusterID:   100,
-			ClusterName: "test-100",
-		},
-	}
-	connConfig := v1.ApiServerConnConfig{
-		Endpoint:  "https://192.168.0.94:6443",
-		SecretRef: "test-100",
-	}
-	rc.Spec.ConnConfig = connConfig
-
-	rcClient, err := NewRemoteClusterManager(kubeClient, rc)
-	assert.Nil(t, err)
-	assert.NotNil(t, rcClient.ramaClient)
-	assert.NotNil(t, rcClient.kubeClient)
-	body, err := rcClient.kubeClient.Discovery().RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
-	assert.Nil(t, err)
-	t.Logf(string(body))
-}
 
 func TestWatchRemoteCluster(t *testing.T) {
 	config, err := clientconfig.GetConfig()

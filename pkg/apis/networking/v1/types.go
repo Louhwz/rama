@@ -266,7 +266,7 @@ type RemoteSubnetSpec struct {
 	CIDR         string      `json:"cidr"`
 	Type         NetworkType `json:"type,omitempty"`
 	ClusterID    uint32      `json:"cluster_id"`
-	OverlayNetID uint32      `json:"overlay_net_id"`
+	OverlayNetID *uint32     `json:"overlay_net_id,omitempty"`
 }
 
 // RemoteSubnetStatus is the status for a RemoteSubnet resource
