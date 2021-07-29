@@ -179,3 +179,12 @@ func father() {
 		}()
 	}
 }
+
+func TestErrKubeI(t *testing.T) {
+	config, err := clientconfig.GetConfig()
+	t.Log(err)
+	kubeClient := kubernetes.NewForConfigOrDie(config)
+	body, err := kubeClient.DiscoveryClient.RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
+	t.Log(err)
+	t.Log(string(body))
+}

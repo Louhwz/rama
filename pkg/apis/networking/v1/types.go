@@ -17,6 +17,7 @@
 package v1
 
 import (
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -212,13 +213,24 @@ type ApiServerConnConfig struct {
 
 // RemoteClusterStatus is the status for a RemoteCluster resource
 type RemoteClusterStatus struct {
+	// Conditions is an array of current cluster conditions.
+	Conditions []ClusterCondition `json:"conditions"`
+}
+
+// ClusterCondition describes current state of a cluster.
+type ClusterCondition struct {
 	// Type of cluster condition, Ready or Offline.
-	Status Status `json:"status"`
+	Type ClusterConditionType `json:"type"`
+	// Status of the condition, one of True, False, Unknown.
+	Status apiv1.ConditionStatus `json:"status"`
 	// Last time the condition was checked.
 	LastProbeTime metav1.Time `json:"lastProbeTime"`
 	// Last time the condition transit from one status to another.
 	// +optional
 	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+	// (brief) reason for the condition's last transition.
+	// +optional
+	Reason *string `json:"reason,omitempty"`
 	// Human readable message indicating details about last transition.
 	// +optional
 	Message *string `json:"message,omitempty"`
@@ -250,10 +262,11 @@ type RemoteSubnet struct {
 
 // RemoteSubnetSpec is the spec for a RemoteSubnet resource
 type RemoteSubnetSpec struct {
-	Version   IPVersion   `json:"version"`
-	CIDR      string      `json:"cidr"`
-	Type      NetworkType `json:"type,omitempty"`
-	ClusterID uint32      `json:"cluster_id"`
+	Version      IPVersion   `json:"version"`
+	CIDR         string      `json:"cidr"`
+	Type         NetworkType `json:"type,omitempty"`
+	ClusterID    uint32      `json:"cluster_id"`
+	OverlayNetID uint32      `json:"overlay_net_id"`
 }
 
 // RemoteSubnetStatus is the status for a RemoteSubnet resource
