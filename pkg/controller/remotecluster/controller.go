@@ -11,6 +11,7 @@ import (
 	"github.com/oecp/rama/pkg/client/clientset/versioned"
 	informers "github.com/oecp/rama/pkg/client/informers/externalversions/networking/v1"
 	listers "github.com/oecp/rama/pkg/client/listers/networking/v1"
+	"github.com/oecp/rama/pkg/rcmanager"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
@@ -60,7 +61,7 @@ func NewController(
 	c := &Controller{
 		remoteClusterCache: Cache{
 			mu:               sync.RWMutex{},
-			remoteClusterMap: make(map[uint32]*Manager),
+			remoteClusterMap: make(map[uint32]*rcmanager.Manager),
 		},
 		kubeClient:           kubeClient,
 		ramaClient:           ramaClient,
@@ -106,30 +107,9 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (c *Controller) delRemoteClusterClient(key uint32) error {
-	c.remoteClusterCache.mu.Lock()
-	defer c.remoteClusterCache.mu.Unlock()
-	// todo any way to release client?
-	delete(c.remoteClusterCache.remoteClusterMap, key)
+func (c *Controller) delRemoteClusterManager(key uint32) error {
+	c.remoteClusterCache.Del(key)
 	klog.Infof("Delete remote cluster ache. key=%v", key)
-	return nil
-}
-
-// clusterID is not allowed to modify, webhook will ensure that
-func (c *Controller) addOrUpdateRemoteClusterManager(rc *apiv1.RemoteCluster) error {
-	key := rc.Spec.ClusterID
-	_, exist := c.remoteClusterCache.Get(rc.Spec.ClusterID)
-	if exist {
-		c.deleteRemoteCluster(rc.Spec.ClusterID)
-	}
-
-	rcManager, err := NewRemoteClusterManager(c.kubeClient, rc)
-	if err != nil || rcManager.ramaClient == nil || rcManager.kubeClient == nil {
-		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig", fmt.Sprintf("Can't connect to remote cluster %v", key))
-		return errors.New("")
-	}
-	c.remoteClusterCache.Set(rc.Spec.ClusterID, rcManager)
-	c.rcManagerQueue.Add(key)
 	return nil
 }
 
@@ -154,7 +134,25 @@ func (c *Controller) updateRemoteClusterStatus() {
 	wg.Wait()
 }
 
-func (c *Controller) updateSingleRCManager(rcClient *Manager, wg *sync.WaitGroup) {
+// clusterID is not allowed to modify, webhook will ensure that
+func (c *Controller) addOrUpdateRemoteClusterManager(rc *apiv1.RemoteCluster) error {
+	key := rc.Spec.ClusterID
+	_, exist := c.remoteClusterCache.Get(rc.Spec.ClusterID)
+	if exist {
+		_ = c.delRemoteClusterManager(rc.Spec.ClusterID)
+	}
+
+	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, rc)
+	if err != nil || rcManager.RamaClient == nil || rcManager.KubeClient == nil {
+		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig", fmt.Sprintf("Can't connect to remote cluster %v", key))
+		return errors.New("")
+	}
+	c.remoteClusterCache.Set(rc.Spec.ClusterID, rcManager)
+	c.rcManagerQueue.Add(key)
+	return nil
+}
+
+func (c *Controller) updateSingleRCManager(rcClient *rcmanager.Manager, wg *sync.WaitGroup) {
 	// todo metrics
 	//rcKubeClient := c.kubeClient
 	//rcKubeClinet
@@ -185,16 +183,16 @@ func (c *Controller) startRemoteClusterManager(stopCh <-chan struct{}) bool {
 	}
 	klog.Infof("Start single remote cluster manager. clusterID=%v", clusterID)
 	go func() {
-		if ok := cache.WaitForCacheSync(stopCh, rcManager.nodeSynced, rcManager.subnetSynced, rcManager.ipSynced); !ok {
+		if ok := cache.WaitForCacheSync(stopCh, rcManager.NodeSynced, rcManager.SubnetSynced, rcManager.IpSynced); !ok {
 			klog.Errorf("failed to wait for remote cluster caches to sync. clusterID=%v", clusterID)
 			return
 		}
-		go wait.Until(rcManager.runNodeWorker, 1*time.Second, stopCh)
-		go wait.Until(rcManager.runNodeWorker, 1*time.Second, stopCh)
-		go wait.Until(rcManager.runIPInstanceWorker, 1*time.Second, stopCh)
+		go wait.Until(rcManager.RunNodeWorker, 1*time.Second, stopCh)
+		go wait.Until(rcManager.RunNodeWorker, 1*time.Second, stopCh)
+		go wait.Until(rcManager.RunIPInstanceWorker, 1*time.Second, stopCh)
 	}()
-	go rcManager.kubeInformerFactory.Start(stopCh)
-	go rcManager.ramaInformerFactory.Start(stopCh)
+	go rcManager.KubeInformerFactory.Start(stopCh)
+	go rcManager.RamaInformerFactory.Start(stopCh)
 
 	return true
 
