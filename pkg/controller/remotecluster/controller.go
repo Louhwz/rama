@@ -2,6 +2,7 @@ package remotecluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -115,21 +116,19 @@ func (c *Controller) delRemoteClusterClient(key uint32) error {
 }
 
 // clusterID is not allowed to modify, webhook will ensure that
-func (c *Controller) addOrUpdateRemoteClusterManager(key uint32, rc *apiv1.RemoteCluster) error {
-	c.remoteClusterCache.mu.Lock()
-	defer c.remoteClusterCache.mu.Unlock()
-
-	client := c.remoteClusterCache.remoteClusterMap[key]
-	if client != nil {
-		// todo update logic
+func (c *Controller) addOrUpdateRemoteClusterManager(rc *apiv1.RemoteCluster) error {
+	key := rc.Spec.ClusterID
+	_, exist := c.remoteClusterCache.Get(rc.Spec.ClusterID)
+	if exist {
+		c.deleteRemoteCluster(rc.Spec.ClusterID)
 	}
 
 	rcManager, err := NewRemoteClusterManager(c.kubeClient, rc)
 	if err != nil || rcManager.ramaClient == nil || rcManager.kubeClient == nil {
 		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig", fmt.Sprintf("Can't connect to remote cluster %v", key))
-		return nil
+		return errors.New("")
 	}
-	c.remoteClusterCache.remoteClusterMap[key] = rcManager
+	c.remoteClusterCache.Set(rc.Spec.ClusterID, rcManager)
 	c.rcManagerQueue.Add(key)
 	return nil
 }
@@ -145,7 +144,8 @@ func (c *Controller) updateRemoteClusterStatus() {
 	var wg sync.WaitGroup
 	for _, obj := range remoteClusters.Items {
 		manager, exists := c.remoteClusterCache.Get(obj.Spec.ClusterID)
-		if !exists || manager == nil {
+		if !exists {
+			c.addOrUpdateRemoteClusterManager(&obj)
 			// todo register
 		}
 		wg.Add(1)
@@ -155,7 +155,9 @@ func (c *Controller) updateRemoteClusterStatus() {
 }
 
 func (c *Controller) updateSingleRCManager(rcClient *Manager, wg *sync.WaitGroup) {
-
+	// todo metrics
+	//rcKubeClient := c.kubeClient
+	//rcKubeClinet
 }
 
 func (c *Controller) processRCManagerQueue(stopCh <-chan struct{}) {
@@ -178,10 +180,10 @@ func (c *Controller) startRemoteClusterManager(stopCh <-chan struct{}) bool {
 
 	rcManager, exists := c.remoteClusterCache.Get(clusterID)
 	if !exists {
-		klog.Error("Can't find rcManager. clusterID=%v", clusterID)
+		klog.Errorf("Can't find rcManager. clusterID=%v", clusterID)
 		return true
 	}
-	klog.Info("Start single remote cluster manager. clusterID=%v", clusterID)
+	klog.Infof("Start single remote cluster manager. clusterID=%v", clusterID)
 	go func() {
 		if ok := cache.WaitForCacheSync(stopCh, rcManager.nodeSynced, rcManager.subnetSynced, rcManager.ipSynced); !ok {
 			klog.Errorf("failed to wait for remote cluster caches to sync. clusterID=%v", clusterID)

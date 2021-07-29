@@ -3,16 +3,13 @@ package utils
 import (
 	"context"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	kubeclientset "k8s.io/client-go/kubernetes"
-
-	v1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/clientcmd"
-
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kubeclientset "k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -25,7 +22,7 @@ const (
 	ClientKeyKey  = "client.key"
 )
 
-func BuildClusterConfig(client kubeclientset.Interface, rc *v1.RemoteCluster) (*restclient.Config, error) {
+func BuildClusterConfig(client kubeclientset.Interface, rc *networkingv1.RemoteCluster) (*restclient.Config, error) {
 	var (
 		err         error
 		secret      = &apiv1.Secret{}
@@ -37,7 +34,7 @@ func BuildClusterConfig(client kubeclientset.Interface, rc *v1.RemoteCluster) (*
 		return nil, err
 	}
 
-	// todo check
+	// todo check namespace
 	secret, err = client.CoreV1().Secrets(rc.ObjectMeta.Namespace).Get(context.TODO(), connConfig.SecretRef, metav1.GetOptions{})
 	if err != nil {
 		return nil, err

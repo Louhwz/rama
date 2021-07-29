@@ -1,7 +1,14 @@
 package remotecluster
 
 import (
+	"context"
+	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/util/runtime"
+
+	"k8s.io/klog"
 
 	apiv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/client/clientset/versioned"
@@ -21,8 +28,8 @@ type Manager struct {
 	clusterID           uint32
 	clusterName         string
 	inClusterKubeClient kubeclientset.Interface
-	kubeClient          kubeclientset.Interface
-	ramaClient          versioned.Interface
+	kubeClient          *kubeclientset.Clientset
+	ramaClient          *versioned.Clientset
 	kubeInformerFactory informers.SharedInformerFactory
 	ramaInformerFactory externalversions.SharedInformerFactory
 	nodeLister          corev1.NodeLister
@@ -35,6 +42,12 @@ type Manager struct {
 }
 
 func NewRemoteClusterManager(client kubeclientset.Interface, rc *apiv1.RemoteCluster) (*Manager, error) {
+	defer func() {
+		if err := recover(); err != nil {
+			klog.Warningf("Panic hanppened. Maybe wrong kube config. err=%v", err)
+		}
+	}()
+
 	config, err := utils.BuildClusterConfig(client, rc)
 	if err != nil {
 		return nil, err
@@ -47,9 +60,6 @@ func NewRemoteClusterManager(client kubeclientset.Interface, rc *apiv1.RemoteClu
 
 	rcManager.kubeClient = kubeclientset.NewForConfigOrDie(config)
 	rcManager.ramaClient = versioned.NewForConfigOrDie(restclient.AddUserAgent(config, UserAgentName))
-	if rcManager.kubeClient == nil || rcManager.ramaClient == nil {
-		return nil, nil
-	}
 
 	rcManager.kubeInformerFactory = informers.NewSharedInformerFactory(rcManager.kubeClient, 0)
 	rcManager.ramaInformerFactory = externalversions.NewSharedInformerFactory(rcManager.ramaClient, 0)
@@ -89,6 +99,23 @@ func NewRemoteClusterManager(client kubeclientset.Interface, rc *apiv1.RemoteClu
 	})
 	rcManager.inClusterKubeClient = client
 	return rcManager, nil
+}
+
+func (m *Manager) getClusterHealthStatus() (*apiv1.RemoteClusterStatus, error) {
+	clusterStatus := &apiv1.RemoteClusterStatus{}
+
+	body, err := m.kubeClient.DiscoveryClient.RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
+	if err != nil {
+		runtime.HandleError(errors.Wrapf(err, "Cluster Health Check failed for cluster %v", m.clusterID))
+		m.clusterStatus.Conditions = append(m.clusterStatus.Conditions)
+	} else {
+		if !strings.EqualFold(string(body), "ok") {
+
+		} else {
+
+		}
+	}
+	return clusterStatus, nil
 }
 
 func (m *Manager) runNodeWorker() {

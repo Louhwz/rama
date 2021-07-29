@@ -2,18 +2,14 @@ package remotecluster
 
 import (
 	"fmt"
-	"gopkg.in/errgo.v2/fmt/errors"
-
-	jsoniter "github.com/json-iterator/go"
-	"k8s.io/klog"
-
-	//"fmt"
 	"reflect"
 	"strconv"
 
-	k8serror "k8s.io/apimachinery/pkg/api/errors"
-
+	jsoniter "github.com/json-iterator/go"
 	v1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	"gopkg.in/errgo.v2/fmt/errors"
+	k8serror "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/klog"
 )
 
 func (c *Controller) filterRemoteCluster(obj interface{}) bool {
@@ -69,7 +65,7 @@ func (c *Controller) reconcileRemoteCluster(key uint32) error {
 		return errors.New("Can't assertion")
 	}
 
-	return c.addOrUpdateRemoteClusterManager(key, rc)
+	return c.addOrUpdateRemoteClusterManager(rc)
 
 }
 
