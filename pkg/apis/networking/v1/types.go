@@ -271,7 +271,7 @@ type RemoteSubnetSpec struct {
 
 // RemoteSubnetStatus is the status for a RemoteSubnet resource
 type RemoteSubnetStatus struct {
-	SubnetStatus
+	CreateTime metav1.Time `json:"create_time"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -308,8 +308,8 @@ type RemoteVtepSpec struct {
 
 // RemoteVtepStatus is the status for a RemoteVtep resource
 type RemoteVtepStatus struct {
-	PodIPList      []string `json:"pod_ip_list"`
-	LastModifyTime string   `json:"last_modify_time"`
+	PodIPList      []string    `json:"pod_ip_list"`
+	LastModifyTime metav1.Time `json:"last_modify_time"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -40,16 +40,20 @@ type Controller struct {
 	remoteClusterSynced  cache.InformerSynced
 	remoteClusterIndexer cache.Indexer
 	remoteClusterQueue   workqueue.RateLimitingInterface
-	remoteClusterCache   Cache
-	recorder             record.EventRecorder
-	rcManagerQueue       workqueue.RateLimitingInterface
+	remoteSubnetLister   listers.RemoteSubnetLister
+	remoteSubnetSynced   cache.InformerSynced
+
+	remoteClusterCache Cache
+	recorder           record.EventRecorder
+	rcManagerQueue     workqueue.RateLimitingInterface
 }
 
 func NewController(
 	recorder record.EventRecorder,
 	kubeClient kubeclientset.Interface,
 	ramaClient versioned.Interface,
-	remoteClusterInformer informers.RemoteClusterInformer) *Controller {
+	remoteClusterInformer informers.RemoteClusterInformer,
+	remoteSubnetInformer informers.RemoteSubnetInformer) *Controller {
 	runtimeutil.Must(apiv1.AddToScheme(scheme.Scheme))
 
 	if err := remoteClusterInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
@@ -68,8 +72,11 @@ func NewController(
 		remoteClusterLister:  remoteClusterInformer.Lister(),
 		remoteClusterSynced:  remoteClusterInformer.Informer().HasSynced,
 		remoteClusterIndexer: remoteClusterInformer.Informer().GetIndexer(),
-		remoteClusterQueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
-		recorder:             recorder,
+		remoteSubnetLister:   remoteSubnetInformer.Lister(),
+		remoteSubnetSynced:   remoteSubnetInformer.Informer().HasSynced,
+
+		remoteClusterQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
+		recorder:           recorder,
 	}
 
 	remoteClusterInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
@@ -142,7 +149,7 @@ func (c *Controller) addOrUpdateRemoteClusterManager(rc *apiv1.RemoteCluster) er
 		_ = c.delRemoteClusterManager(rc.Spec.ClusterID)
 	}
 
-	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, rc)
+	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, rc, c.remoteSubnetLister, c.remoteSubnetSynced)
 	if err != nil || rcManager.RamaClient == nil || rcManager.KubeClient == nil {
 		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig", fmt.Sprintf("Can't connect to remote cluster %v", key))
 		return errors.New("")
@@ -188,7 +195,7 @@ func (c *Controller) startRemoteClusterManager(stopCh <-chan struct{}) bool {
 			return
 		}
 		go wait.Until(rcManager.RunNodeWorker, 1*time.Second, stopCh)
-		go wait.Until(rcManager.RunNodeWorker, 1*time.Second, stopCh)
+		go wait.Until(rcManager.RunSubnetWorker, 1*time.Second, stopCh)
 		go wait.Until(rcManager.RunIPInstanceWorker, 1*time.Second, stopCh)
 	}()
 	go rcManager.KubeInformerFactory.Start(stopCh)
