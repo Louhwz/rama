@@ -34,18 +34,20 @@ const (
 )
 
 type Controller struct {
-	kubeClient           kubeclientset.Interface
-	ramaClient           versioned.Interface
-	remoteClusterLister  listers.RemoteClusterLister
-	remoteClusterSynced  cache.InformerSynced
-	remoteClusterIndexer cache.Indexer
-	remoteClusterQueue   workqueue.RateLimitingInterface
-	remoteSubnetLister   listers.RemoteSubnetLister
-	remoteSubnetSynced   cache.InformerSynced
+	kubeClient               kubeclientset.Interface
+	ramaClient               versioned.Interface
+	remoteClusterLister      listers.RemoteClusterLister
+	remoteClusterSynced      cache.InformerSynced
+	remoteClusterIndexer     cache.Indexer
+	remoteClusterQueue       workqueue.RateLimitingInterface
+	remoteSubnetLister       listers.RemoteSubnetLister
+	remoteSubnetSynced       cache.InformerSynced
+	localClusterSubnetLister listers.SubnetLister
+	localClusterSubnetSynced cache.InformerSynced
 
-	remoteClusterCache Cache
-	recorder           record.EventRecorder
-	rcManagerQueue     workqueue.RateLimitingInterface
+	remoteClusterManagerCache Cache
+	recorder                  record.EventRecorder
+	rcManagerQueue            workqueue.RateLimitingInterface
 }
 
 func NewController(
@@ -53,27 +55,30 @@ func NewController(
 	kubeClient kubeclientset.Interface,
 	ramaClient versioned.Interface,
 	remoteClusterInformer informers.RemoteClusterInformer,
-	remoteSubnetInformer informers.RemoteSubnetInformer) *Controller {
+	remoteSubnetInformer informers.RemoteSubnetInformer,
+	localClusterSubnetInformer informers.SubnetInformer) *Controller {
 	runtimeutil.Must(apiv1.AddToScheme(scheme.Scheme))
 
 	if err := remoteClusterInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
 		ByRemoteClusterIDIndexer: indexByRemoteClusterID,
 	}); err != nil {
-		klog.Fatalf("create remote cluster informer err. err=%v", err)
+		klog.Fatalf("add remote cluster indexer err. err=%v", err)
 	}
 
 	c := &Controller{
-		remoteClusterCache: Cache{
+		remoteClusterManagerCache: Cache{
 			mu:               sync.RWMutex{},
 			remoteClusterMap: make(map[uint32]*rcmanager.Manager),
 		},
-		kubeClient:           kubeClient,
-		ramaClient:           ramaClient,
-		remoteClusterLister:  remoteClusterInformer.Lister(),
-		remoteClusterSynced:  remoteClusterInformer.Informer().HasSynced,
-		remoteClusterIndexer: remoteClusterInformer.Informer().GetIndexer(),
-		remoteSubnetLister:   remoteSubnetInformer.Lister(),
-		remoteSubnetSynced:   remoteSubnetInformer.Informer().HasSynced,
+		kubeClient:               kubeClient,
+		ramaClient:               ramaClient,
+		remoteClusterLister:      remoteClusterInformer.Lister(),
+		remoteClusterSynced:      remoteClusterInformer.Informer().HasSynced,
+		remoteClusterIndexer:     remoteClusterInformer.Informer().GetIndexer(),
+		remoteSubnetLister:       remoteSubnetInformer.Lister(),
+		remoteSubnetSynced:       remoteSubnetInformer.Informer().HasSynced,
+		localClusterSubnetLister: localClusterSubnetInformer.Lister(),
+		localClusterSubnetSynced: localClusterSubnetInformer.Informer().HasSynced,
 
 		remoteClusterQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
 		recorder:           recorder,
@@ -115,7 +120,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 }
 
 func (c *Controller) delRemoteClusterManager(key uint32) error {
-	c.remoteClusterCache.Del(key)
+	c.remoteClusterManagerCache.Del(key)
 	klog.Infof("Delete remote cluster ache. key=%v", key)
 	return nil
 }
@@ -130,7 +135,7 @@ func (c *Controller) updateRemoteClusterStatus() {
 
 	var wg sync.WaitGroup
 	for _, obj := range remoteClusters.Items {
-		manager, exists := c.remoteClusterCache.Get(obj.Spec.ClusterID)
+		manager, exists := c.remoteClusterManagerCache.Get(obj.Spec.ClusterID)
 		if !exists {
 			c.addOrUpdateRemoteClusterManager(&obj)
 			// todo register
@@ -144,17 +149,18 @@ func (c *Controller) updateRemoteClusterStatus() {
 // clusterID is not allowed to modify, webhook will ensure that
 func (c *Controller) addOrUpdateRemoteClusterManager(rc *apiv1.RemoteCluster) error {
 	key := rc.Spec.ClusterID
-	_, exist := c.remoteClusterCache.Get(rc.Spec.ClusterID)
+	_, exist := c.remoteClusterManagerCache.Get(rc.Spec.ClusterID)
 	if exist {
 		_ = c.delRemoteClusterManager(rc.Spec.ClusterID)
 	}
 
-	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, rc, c.remoteSubnetLister, c.remoteSubnetSynced)
+	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, rc, c.remoteSubnetLister, c.remoteSubnetSynced,
+		c.localClusterSubnetLister, c.localClusterSubnetSynced)
 	if err != nil || rcManager.RamaClient == nil || rcManager.KubeClient == nil {
 		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig", fmt.Sprintf("Can't connect to remote cluster %v", key))
 		return errors.New("")
 	}
-	c.remoteClusterCache.Set(rc.Spec.ClusterID, rcManager)
+	c.remoteClusterManagerCache.Set(rc.Spec.ClusterID, rcManager)
 	c.rcManagerQueue.Add(key)
 	return nil
 }
@@ -171,7 +177,11 @@ func (c *Controller) processRCManagerQueue(stopCh <-chan struct{}) {
 }
 
 func (c *Controller) startRemoteClusterManager(stopCh <-chan struct{}) bool {
-	defer runtimeutil.HandleCrash()
+	defer func() {
+		if err := recover(); err != nil {
+			klog.Errorf("startRemoteClusterManager panic. err=%v", err)
+		}
+	}()
 
 	obj, shutdown := c.rcManagerQueue.Get()
 	if shutdown {
@@ -183,14 +193,14 @@ func (c *Controller) startRemoteClusterManager(stopCh <-chan struct{}) bool {
 		return true
 	}
 
-	rcManager, exists := c.remoteClusterCache.Get(clusterID)
+	rcManager, exists := c.remoteClusterManagerCache.Get(clusterID)
 	if !exists {
 		klog.Errorf("Can't find rcManager. clusterID=%v", clusterID)
 		return true
 	}
 	klog.Infof("Start single remote cluster manager. clusterID=%v", clusterID)
 	go func() {
-		if ok := cache.WaitForCacheSync(stopCh, rcManager.NodeSynced, rcManager.SubnetSynced, rcManager.IpSynced); !ok {
+		if ok := cache.WaitForCacheSync(stopCh, rcManager.NodeSynced, rcManager.SubnetSynced, rcManager.IPSynced); !ok {
 			klog.Errorf("failed to wait for remote cluster caches to sync. clusterID=%v", clusterID)
 			return
 		}

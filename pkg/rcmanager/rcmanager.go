@@ -2,15 +2,19 @@ package rcmanager
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
-	apiv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/client/clientset/versioned"
 	"github.com/oecp/rama/pkg/client/informers/externalversions"
 	listers "github.com/oecp/rama/pkg/client/listers/networking/v1"
+	"github.com/oecp/rama/pkg/constants"
 	"github.com/oecp/rama/pkg/utils"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/informers"
 	kubeclientset "k8s.io/client-go/kubernetes"
@@ -21,39 +25,53 @@ import (
 	"k8s.io/klog"
 )
 
-const UserAgentName = "Cluster-Controller"
+const (
+	UserAgentName = "Cluster-Controller"
+
+	ByNodeNameIndexer = "nodename"
+)
 
 type Manager struct {
-	clusterID           uint32
-	clusterName         string
-	clusterStatus       *apiv1.RemoteClusterStatus
-	inClusterKubeClient kubeclientset.Interface
-	inClusterRamaClient versioned.Interface
-	remoteSubnetLister  listers.RemoteSubnetLister
-	remoteSubnetSynced  cache.InformerSynced
+	clusterID                uint32
+	clusterName              string
+	clusterStatus            *networkingv1.RemoteClusterStatus
+	localClusterKubeClient   kubeclientset.Interface
+	localClusterRamaClient   versioned.Interface
+	remoteSubnetLister       listers.RemoteSubnetLister
+	remoteSubnetSynced       cache.InformerSynced
+	remoteVtepLister         listers.RemoteVtepLister
+	remoteVtepSynced         cache.InformerSynced
+	localClusterSubnetLister listers.SubnetLister
+	localClusterSubnetSynced cache.InformerSynced
 
-	KubeClient          *kubeclientset.Clientset
-	RamaClient          *versioned.Clientset
-	KubeInformerFactory informers.SharedInformerFactory
-	RamaInformerFactory externalversions.SharedInformerFactory
-	nodeLister          corev1.NodeLister
-	NodeSynced          cache.InformerSynced
-	nodeQueue           workqueue.RateLimitingInterface
-	networkLister       listers.NetworkLister
-	networkSynced       cache.InformerSynced
-	subnetLister        listers.SubnetLister
-	SubnetSynced        cache.InformerSynced
-	subnetQueue         workqueue.RateLimitingInterface
-	ipLister            listers.IPInstanceLister
-	IpSynced            cache.InformerSynced
-	ipQueue             workqueue.RateLimitingInterface
+	KubeClient               *kubeclientset.Clientset
+	RamaClient               *versioned.Clientset
+	KubeInformerFactory      informers.SharedInformerFactory
+	RamaInformerFactory      externalversions.SharedInformerFactory
+	nodeLister               corev1.NodeLister
+	NodeSynced               cache.InformerSynced
+	nodeQueue                workqueue.RateLimitingInterface
+	networkLister            listers.NetworkLister
+	networkSynced            cache.InformerSynced
+	subnetLister             listers.SubnetLister
+	SubnetSynced             cache.InformerSynced
+	subnetQueue              workqueue.RateLimitingInterface
+	IPLister                 listers.IPInstanceLister
+	IPSynced                 cache.InformerSynced
+	IPQueue                  workqueue.RateLimitingInterface
+	IPIndexer                cache.Indexer
+	remoteClusterNodeLister  corev1.NodeLister
+	remoteClusterNodeSynced  cache.InformerSynced
+	remoteClusterNodeIndexer cache.Indexer
 }
 
 func NewRemoteClusterManager(
 	localClusterKubeClient kubeclientset.Interface,
-	rc *apiv1.RemoteCluster,
+	rc *networkingv1.RemoteCluster,
 	remoteSubnetLister listers.RemoteSubnetLister,
-	remoteSubnetHasSynced cache.InformerSynced) (*Manager, error) {
+	remoteSubnetHasSynced cache.InformerSynced,
+	localClusterSubnetLister listers.SubnetLister,
+	localClusterSubnetSynced cache.InformerSynced) (*Manager, error) {
 	defer func() {
 		if err := recover(); err != nil {
 			klog.Warningf("Panic hanppened. Maybe wrong kube config. err=%v", err)
@@ -64,37 +82,75 @@ func NewRemoteClusterManager(
 	if err != nil {
 		return nil, err
 	}
-	rcManager := &Manager{
-		clusterID:   rc.Spec.ClusterID,
-		clusterName: rc.Spec.ClusterName,
-	}
 	config.Timeout = time.Duration(rc.Spec.ConnConfig.Timeout) * time.Second
 
-	rcManager.KubeClient = kubeclientset.NewForConfigOrDie(config)
-	rcManager.RamaClient = versioned.NewForConfigOrDie(restclient.AddUserAgent(config, UserAgentName))
-	rcManager.remoteSubnetLister = remoteSubnetLister
-	rcManager.remoteSubnetSynced = remoteSubnetHasSynced
+	kubeClient := kubeclientset.NewForConfigOrDie(config)
+	ramaClient := versioned.NewForConfigOrDie(restclient.AddUserAgent(config, UserAgentName))
+	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
+	ramaInformerFactory := externalversions.NewSharedInformerFactory(ramaClient, 0)
 
-	rcManager.KubeInformerFactory = informers.NewSharedInformerFactory(rcManager.KubeClient, 0)
-	rcManager.RamaInformerFactory = externalversions.NewSharedInformerFactory(rcManager.RamaClient, 0)
-	rcManager.nodeLister = rcManager.KubeInformerFactory.Core().V1().Nodes().Lister()
-	rcManager.NodeSynced = rcManager.KubeInformerFactory.Core().V1().Nodes().Informer().HasSynced
+	if err := ramaInformerFactory.Networking().V1().IPInstances().Informer().GetIndexer().AddIndexers(cache.Indexers{
+		ByNodeNameIndexer: indexByNodeName,
+	}); err != nil {
+		klog.Error("index by node name failed. err=%v. ", err)
+		return nil, errors.New("Can't add indexer")
+	}
+
+	rcManager := &Manager{
+		clusterID:                rc.Spec.ClusterID,
+		clusterName:              rc.Spec.ClusterName,
+		clusterStatus:            nil,
+		localClusterKubeClient:   localClusterKubeClient,
+		localClusterRamaClient:   nil,
+		remoteSubnetLister:       remoteSubnetLister,
+		remoteSubnetSynced:       remoteSubnetHasSynced,
+		remoteVtepLister:         nil,
+		remoteVtepSynced:         nil,
+		localClusterSubnetLister: localClusterSubnetLister,
+		localClusterSubnetSynced: localClusterSubnetSynced,
+		KubeClient:               kubeClient,
+		RamaClient:               ramaClient,
+		KubeInformerFactory:      kubeInformerFactory,
+		RamaInformerFactory:      ramaInformerFactory,
+		nodeLister:               kubeInformerFactory.Core().V1().Nodes().Lister(),
+		NodeSynced:               kubeInformerFactory.Core().V1().Nodes().Informer().HasSynced,
+		nodeQueue:                workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("node-%v", rc.Spec.ClusterID)),
+		networkLister:            nil,
+		networkSynced:            nil,
+		subnetLister:             nil,
+		SubnetSynced:             nil,
+		subnetQueue:              nil,
+		IPLister:                 nil,
+		IPSynced:                 nil,
+		IPQueue:                  nil,
+		IPIndexer:                nil,
+		remoteClusterNodeLister:  nil,
+		remoteClusterNodeSynced:  nil,
+		remoteClusterNodeIndexer: nil,
+	}
+
 	rcManager.subnetLister = rcManager.RamaInformerFactory.Networking().V1().Subnets().Lister()
 	rcManager.SubnetSynced = rcManager.RamaInformerFactory.Networking().V1().Subnets().Informer().HasSynced
-	rcManager.ipLister = rcManager.RamaInformerFactory.Networking().V1().IPInstances().Lister()
-	rcManager.IpSynced = rcManager.RamaInformerFactory.Networking().V1().IPInstances().Informer().HasSynced
+	rcManager.subnetQueue = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("subnet-%v", rcManager.clusterID))
+	rcManager.IPLister = rcManager.RamaInformerFactory.Networking().V1().IPInstances().Lister()
+	rcManager.IPSynced = rcManager.RamaInformerFactory.Networking().V1().IPInstances().Informer().HasSynced
+	rcManager.IPIndexer = rcManager.RamaInformerFactory.Networking().V1().IPInstances().Informer().GetIndexer()
+	rcManager.IPQueue = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), fmt.Sprintf("ipinstance-%v", rcManager.clusterID))
 	rcManager.networkLister = rcManager.RamaInformerFactory.Networking().V1().Networks().Lister()
 	rcManager.networkSynced = rcManager.RamaInformerFactory.Networking().V1().Networks().Informer().HasSynced
+	rcManager.remoteClusterNodeLister = rcManager.KubeInformerFactory.Core().V1().Nodes().Lister()
+	rcManager.remoteClusterNodeSynced = rcManager.KubeInformerFactory.Core().V1().Nodes().Informer().HasSynced
 
 	nodeInformer := rcManager.KubeInformerFactory.Core().V1().Nodes().Informer()
 	nodeInformer.AddEventHandler(cache.FilteringResourceEventHandler{
-		FilterFunc: nil,
+		FilterFunc: rcManager.filterNode,
 		Handler: cache.ResourceEventHandlerFuncs{
-			AddFunc:    nil,
-			UpdateFunc: nil,
-			DeleteFunc: nil,
+			AddFunc:    rcManager.addOrDelNode,
+			UpdateFunc: rcManager.updateNode,
+			DeleteFunc: rcManager.addOrDelNode,
 		},
 	})
+
 	subnetInformer := rcManager.RamaInformerFactory.Networking().V1().RemoteSubnets().Informer()
 	subnetInformer.AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: rcManager.filterSubnet,
@@ -104,21 +160,22 @@ func NewRemoteClusterManager(
 			DeleteFunc: rcManager.addOrDelSubnet,
 		},
 	})
+
 	ipInformer := rcManager.RamaInformerFactory.Networking().V1().IPInstances().Informer()
 	ipInformer.AddEventHandler(cache.FilteringResourceEventHandler{
-		FilterFunc: nil,
+		FilterFunc: rcManager.filterIPInstance,
 		Handler: cache.ResourceEventHandlerFuncs{
-			AddFunc:    nil,
+			AddFunc:    rcManager.addIPInstance,
 			UpdateFunc: nil,
 			DeleteFunc: nil,
 		},
 	})
-	rcManager.inClusterKubeClient = localClusterKubeClient
+	rcManager.localClusterKubeClient = localClusterKubeClient
 	return rcManager, nil
 }
 
-func (m *Manager) getClusterHealthStatus() (*apiv1.RemoteClusterStatus, error) {
-	clusterStatus := &apiv1.RemoteClusterStatus{}
+func (m *Manager) getClusterHealthStatus() (*networkingv1.RemoteClusterStatus, error) {
+	clusterStatus := &networkingv1.RemoteClusterStatus{}
 
 	body, err := m.KubeClient.DiscoveryClient.RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
 	if err != nil {
@@ -134,24 +191,17 @@ func (m *Manager) getClusterHealthStatus() (*apiv1.RemoteClusterStatus, error) {
 	return clusterStatus, nil
 }
 
-func (m *Manager) RunNodeWorker() {
-
-}
-
-func (m *Manager) RunIPInstanceWorker() {
-
-}
-
-func (m *Manager) RunSubnetWorker() {
-	for m.processNextSubnet() {
+func (m *Manager) clusterIDSelector() labels.Selector {
+	s := labels.Set{
+		constants.LabelCluster: strconv.FormatInt(int64(m.clusterID), 10),
 	}
+	return labels.SelectorFromSet(s)
 }
 
-func (m *Manager) filterIpInstance(obj interface{}) bool {
-	_, ok := obj.(*apiv1.IPInstance)
-	return ok
-}
-
-func (m *Manager) diffSubnetAndRCSubnet(subnets []*apiv1.Subnet, subnets2 []*apiv1.RemoteSubnet) (interface{}, interface{}, interface{}) {
-	return nil, nil, nil
+func indexByNodeName(obj interface{}) ([]string, error) {
+	instance, ok := obj.(*networkingv1.IPInstance)
+	if ok {
+		return []string{instance.Status.NodeName}, nil
+	}
+	return []string{}, nil
 }

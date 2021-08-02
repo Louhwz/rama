@@ -54,6 +54,8 @@ func initRCController(m *Manager) error {
 		m.KubeClient,
 		m.RamaClient,
 		m.RamaInformerFactory.Networking().V1().RemoteClusters(),
+		m.RamaInformerFactory.Networking().V1().RemoteSubnets(),
+		m.RamaInformerFactory.Networking().V1().Subnets(),
 	)
 	return nil
 }
