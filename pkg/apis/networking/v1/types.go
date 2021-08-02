@@ -271,7 +271,7 @@ type RemoteSubnetSpec struct {
 
 // RemoteSubnetStatus is the status for a RemoteSubnet resource
 type RemoteSubnetStatus struct {
-	CreateTime metav1.Time `json:"create_time"`
+	LastModifyTime metav1.Time `json:"last_modify_time"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	k8serror "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	jsoniter "github.com/json-iterator/go"
@@ -161,4 +164,106 @@ func TestErrKubeI(t *testing.T) {
 	body, err := kubeClient.DiscoveryClient.RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
 	t.Log(err)
 	t.Log(string(body))
+}
+
+func TestConnection(t *testing.T) {
+	const (
+		ByDefaultNS = "defaultnamespace"
+	)
+	config, err := clientconfig.GetConfig()
+	assert.Nil(t, err)
+	kubeClient := kubernetes.NewForConfigOrDie(config)
+
+	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
+	secretInformer := informerFactory.Core().V1().Secrets()
+	secretLister := informerFactory.Core().V1().Secrets().Lister()
+	queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "secret")
+
+	addFunc := func(obj interface{}) {
+		t.Log("add func", secretInformer.Informer().HasSynced())
+		secret, ok := obj.(*apiv1.Secret)
+		if !ok {
+			t.Fatal("Convert not ok")
+		}
+		s, err := jsoniter.MarshalToString(secret)
+		t.Log(s, err)
+		queue.Add(secret.Name)
+	}
+	updateFunc := func(oldObj, newObj interface{}) {
+		t.Log("update func")
+		secret, ok := newObj.(*apiv1.Secret)
+		if !ok {
+			t.Fatal("Convert not ok")
+		}
+		s, err := jsoniter.MarshalToString(secret)
+		t.Log(s, err)
+		queue.Add(secret.Name)
+	}
+
+	process := func() bool {
+		t.Log("before queue getting")
+		obj, shutdown := queue.Get()
+		if shutdown {
+			return false
+		}
+		s, _ := obj.(string)
+		secret, err := secretLister.Secrets("default").Get(s)
+		t.Log(secret)
+		t.Log(err)
+		return true
+	}
+
+	run := func() {
+		for process() {
+		}
+	}
+	secretInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    addFunc,
+		UpdateFunc: updateFunc,
+		DeleteFunc: addFunc,
+	})
+	if err = secretInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
+		ByDefaultNS: func(obj interface{}) ([]string, error) {
+			return []string{"louhwz"}, nil
+		},
+	}); err != nil {
+		panic(err)
+	}
+
+	ch := make(chan struct{})
+	now := time.Now()
+	t.Log("start sync")
+	t.Log(secretInformer.Informer().HasSynced())
+
+	go func() {
+		if ok := cache.WaitForCacheSync(ch, secretInformer.Informer().HasSynced); !ok {
+			t.Error("failed to wait for caches to sync")
+		}
+	}()
+	go informerFactory.Start(ch)
+
+	t.Logf("sync success. spent: %v", time.Since(now))
+	go func() {
+		for {
+			if secretInformer.Informer().HasSynced() {
+				i, e := secretInformer.Informer().GetIndexer().ByIndex(ByDefaultNS, "louhwz")
+				assert.Nil(t, e)
+				//_, _ := jsoniter.MarshalToString(i)
+				t.Log("len=", len(i))
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}()
+	go wait.Until(run, 1*time.Second, ch)
+	<-ch
+}
+
+func TestDeleteExistResource(t *testing.T) {
+	config, err := clientconfig.GetConfig()
+	assert.Nil(t, err)
+	kubeClient := kubernetes.NewForConfigOrDie(config)
+	err = kubeClient.CoreV1().Pods("default").Delete(context.TODO(), "louhwz", metav1.DeleteOptions{})
+	if k8serror.IsNotFound(err) {
+		t.Log("not found")
+	}
 }
