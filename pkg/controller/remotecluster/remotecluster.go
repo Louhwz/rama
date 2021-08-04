@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"reflect"
 
-	jsoniter "github.com/json-iterator/go"
 	v1 "github.com/oecp/rama/pkg/apis/networking/v1"
-	"gopkg.in/errgo.v2/fmt/errors"
+	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/klog"
 )
 
@@ -38,43 +37,22 @@ func (c *Controller) enqueueRemoteCluster(clusterName string) {
 	c.remoteClusterQueue.Add(clusterName)
 }
 
-// clusterID is unique, webhook will ensure that
+// remote cluster is managed by admin, no need to full synchronize
 func (c *Controller) reconcileRemoteCluster(clusterName string) error {
-	remoteCluster, err := c.remoteClusterIndexer.ByIndex(ByRemoteClusterIDIndexer, clusterName)
-	switch {
-	case err != nil:
+	remoteCluster, err := c.remoteClusterLister.Get(clusterName)
+	if err != nil {
+		if k8serror.IsNotFound(err) {
+			return nil
+		}
 		return err
-	case len(remoteCluster) != 1:
-		return errors.Newf("get more than one cluster for one cluster id. clusterID=%v", clusterName)
-	case len(remoteCluster) == 0:
-		c.delRemoteCluster(clusterName)
-		return nil
 	}
-	rc, ok := remoteCluster[0].(*v1.RemoteCluster)
-	if !ok {
-		s, _ := jsoniter.MarshalToString(remoteCluster)
-		klog.Errorf("Can't assertion to remote cluster. value=%v", s)
-		return errors.New("Can't assertion")
-	}
-
-	return c.addOrUpdateRemoteClusterManager(rc)
-
+	return c.addOrUpdateRemoteClusterManager(remoteCluster)
 }
 
 func (c *Controller) delRemoteCluster(clusterName string) {
 	klog.Infof("deleting clusterID=%v.", clusterName)
 	c.delRemoteClusterManager(clusterName)
-	//c.delAllRemoteClusterResource(clusterName)
 }
-
-//func (c *Controller) delAllRemoteClusterResource(clusterName string) {
-//	err1 := c.ramaClient.NetworkingV1().RemoteVteps().DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{
-//		LabelSelector: utils.SelectorClusterName(clusterName).String(),
-//	})
-//	err2 := c.ramaClient.NetworkingV1().RemoteSubnets().DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{
-//		LabelSelector: utils.SelectorClusterName(clusterName).String(),
-//	})
-//}
 
 func (c *Controller) runRemoteClusterWorker() {
 	for c.processNextRemoteCluster() {

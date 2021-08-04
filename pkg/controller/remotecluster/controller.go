@@ -32,10 +32,9 @@ import (
 const (
 	ControllerName = "remotecluster"
 
-	ByRemoteClusterIDIndexer = "remoteclusterid"
 	// HealthCheckPeriod Every HealthCheckPeriod will resync remote cluster cache and check rc
-	// health. Default: 10 second. Set to zero will also use the default value
-	HealthCheckPeriod = 10 * time.Second
+	// health. Default: 20 second. Set to zero will also use the default value
+	HealthCheckPeriod = 20 * time.Second
 )
 
 type Controller struct {
@@ -46,7 +45,6 @@ type Controller struct {
 
 	remoteClusterLister      listers.RemoteClusterLister
 	remoteClusterSynced      cache.InformerSynced
-	remoteClusterIndexer     cache.Indexer
 	remoteClusterQueue       workqueue.RateLimitingInterface
 	remoteSubnetLister       listers.RemoteSubnetLister
 	remoteSubnetSynced       cache.InformerSynced
@@ -82,7 +80,6 @@ func NewController(
 		ramaClient:               ramaClient,
 		remoteClusterLister:      remoteClusterInformer.Lister(),
 		remoteClusterSynced:      remoteClusterInformer.Informer().HasSynced,
-		remoteClusterIndexer:     remoteClusterInformer.Informer().GetIndexer(),
 		remoteSubnetLister:       remoteSubnetInformer.Lister(),
 		remoteSubnetSynced:       remoteSubnetInformer.Informer().HasSynced,
 		localClusterSubnetLister: localClusterSubnetInformer.Lister(),
@@ -152,7 +149,6 @@ func (c *Controller) updateRemoteClusterStatus() {
 	klog.Info("Update Remote Cluster Status Finished.")
 }
 
-// clusterID is not allowed to modify, webhook will ensure that
 // use remove+add instead of update
 func (c *Controller) addOrUpdateRemoteClusterManager(rc *apiv1.RemoteCluster) error {
 	clusterName := rc.Name
