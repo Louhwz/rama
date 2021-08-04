@@ -76,7 +76,6 @@ func NewController(
 
 	c := &Controller{
 		remoteClusterManagerCache: Cache{
-			mu:               sync.RWMutex{},
 			remoteClusterMap: make(map[string]*rcmanager.Manager),
 		},
 		kubeClient:               kubeClient,
@@ -90,6 +89,7 @@ func NewController(
 		localClusterSubnetSynced: localClusterSubnetInformer.Informer().HasSynced,
 		remoteVtepInformer:       remoteVtepInformer,
 		remoteClusterQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
+		rcManagerQueue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "remoteclustermanager"),
 		recorder:                 recorder,
 	}
 
@@ -106,18 +106,14 @@ func NewController(
 }
 
 func (c *Controller) Run(stopCh <-chan struct{}) error {
-	defer func() {
-		if err := recover(); err != nil {
-			klog.Errorf("panic happened. err=%v", err)
-		}
-	}()
+	defer runtimeutil.HandleCrash()
 	defer c.rcManagerQueue.ShutDown()
 	defer c.remoteClusterQueue.ShutDown()
 
 	klog.Infof("Starting %s controller", ControllerName)
 
 	klog.Info("Waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(stopCh, c.remoteClusterSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, c.remoteClusterSynced, c.remoteSubnetSynced, c.localClusterSubnetSynced); !ok {
 		return fmt.Errorf("%s failed to wait for caches to sync", ControllerName)
 	}
 
@@ -126,6 +122,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	go wait.Until(c.runRemoteClusterWorker, time.Second, stopCh)
 	go wait.Until(c.updateRemoteClusterStatus, HealthCheckPeriod, stopCh)
 	go c.processRCManagerQueue(stopCh)
+
 	<-stopCh
 
 	klog.Info("Shutting down workers")
