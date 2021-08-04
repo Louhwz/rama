@@ -50,12 +50,12 @@ var rcController *remotecluster.Controller
 
 func initRCController(m *Manager) error {
 	rcController = remotecluster.NewController(
-		m.recorder,
 		m.KubeClient,
 		m.RamaClient,
 		m.RamaInformerFactory.Networking().V1().RemoteClusters(),
 		m.RamaInformerFactory.Networking().V1().RemoteSubnets(),
 		m.RamaInformerFactory.Networking().V1().Subnets(),
+		m.RamaInformerFactory.Networking().V1().RemoteVteps(),
 	)
 	return nil
 }

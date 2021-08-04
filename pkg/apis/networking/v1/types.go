@@ -192,20 +192,15 @@ type RemoteCluster struct {
 
 // RemoteClusterSpec is the spec for a RemoteCluster resource
 type RemoteClusterSpec struct {
-	// globally unique id
-	ClusterID uint32 `json:"cluster_id"`
-	// just for human memory, no practical use
-	ClusterName string              `json:"cluster_name"`
-	ConnConfig  ApiServerConnConfig `json:"conn_config"`
+	ConnConfig APIServerConnConfig `json:"connConfig"`
 }
 
-type ApiServerConnConfig struct {
+type APIServerConnConfig struct {
 	// apiServer address. Format: https://ip:port
-	Endpoint string `json:"endpoint"`
-	// Name of the secret containing the token required to access the
-	// member cluster. The secret needs to exist in the same namespace
-	// as the control plane and should have a "token" key.
-	SecretRef string `json:"secret_ref"`
+	Endpoint   string `json:"endpoint"`
+	CABundle   []byte `json:"caBundle"`
+	ClientCert []byte `json:"clientCert"`
+	ClientKey  []byte `json:"clientKey"`
 	// The maximum length of time to wait before giving up on a server
 	// request. A value of zero means no timeout. Default: zero second
 	Timeout uint32 `json:"timeout"`
@@ -264,14 +259,14 @@ type RemoteSubnet struct {
 type RemoteSubnetSpec struct {
 	Version      IPVersion   `json:"version"`
 	CIDR         string      `json:"cidr"`
-	Type         NetworkType `json:"type,omitempty"`
-	ClusterID    uint32      `json:"cluster_id"`
-	OverlayNetID *uint32     `json:"overlay_net_id,omitempty"`
+	Type         NetworkType `json:"type"`
+	ClusterName  string      `json:"clusterName"`
+	OverlayNetID *uint32     `json:"overlayNetID,omitempty"`
 }
 
 // RemoteSubnetStatus is the status for a RemoteSubnet resource
 type RemoteSubnetStatus struct {
-	LastModifyTime metav1.Time `json:"last_modify_time"`
+	LastModifyTime metav1.Time `json:"lastModifyTime"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -300,16 +295,16 @@ type RemoteVtep struct {
 
 // RemoteVtepSpec is the spec for a RemoteVtep resource
 type RemoteVtepSpec struct {
-	ClusterID uint32 `json:"cluster_id"`
-	NodeName  string `json:"node_name"`
-	VtepIP    string `json:"vtep_ip"`
-	VtepMAC   string `json:"vtep_mac"`
+	ClusterName string `json:"clusterName"`
+	NodeName    string `json:"nodeName"`
+	VtepIP      string `json:"vtepIP"`
+	VtepMAC     string `json:"vtepMAC"`
 }
 
 // RemoteVtepStatus is the status for a RemoteVtep resource
 type RemoteVtepStatus struct {
-	PodIPList      []string    `json:"pod_ip_list"`
-	LastModifyTime metav1.Time `json:"last_modify_time"`
+	PodIPList      []string    `json:"podIPList"`
+	LastModifyTime metav1.Time `json:"lastModifyTime"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

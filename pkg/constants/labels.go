@@ -31,6 +31,8 @@ const (
 	LabelDualStackAddressQuota = "networking.alibaba.com/dualstack-address-quota"
 
 	LabelNetworkType = "networking.alibaba.com/network-type"
+
+	LabelRemoteVtepNodeName = "networking.alibaba.com/node-name"
 )
 
 const (
