@@ -2,10 +2,8 @@ package rcmanager
 
 import (
 	"fmt"
-	"time"
 
 	jsoniter "github.com/json-iterator/go"
-
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/client/clientset/versioned"
 	"github.com/oecp/rama/pkg/client/informers/externalversions"
@@ -80,7 +78,6 @@ func NewRemoteClusterManager(
 	if err != nil {
 		return nil, err
 	}
-	config.Timeout = time.Duration(rc.Spec.ConnConfig.Timeout) * time.Second
 
 	kubeClient := kubeclientset.NewForConfigOrDie(config)
 	ramaClient := versioned.NewForConfigOrDie(restclient.AddUserAgent(config, UserAgentName))

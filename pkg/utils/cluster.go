@@ -1,11 +1,12 @@
 package utils
 
 import (
-	"github.com/oecp/rama/pkg/constants"
-	"k8s.io/apimachinery/pkg/labels"
+	"time"
 
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	"github.com/oecp/rama/pkg/constants"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -30,6 +31,8 @@ func BuildClusterConfig(rc *networkingv1.RemoteCluster) (*restclient.Config, err
 		return nil, errors.Errorf("The connection data for cluster %s is missing", clusterName)
 	}
 
+	clusterConfig.Timeout = time.Duration(connConfig.Timeout) * time.Second
+	clusterConfig.CAData = connConfig.CABundle
 	clusterConfig.CertData = connConfig.ClientCert
 	clusterConfig.KeyData = connConfig.ClientKey
 	clusterConfig.QPS = KubeAPIQPS
