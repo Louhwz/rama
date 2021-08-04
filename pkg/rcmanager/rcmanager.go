@@ -153,6 +153,7 @@ func NewRemoteClusterManager(
 		},
 	})
 	rcManager.localClusterKubeClient = localClusterKubeClient
+	klog.Infof("Successfully New Remote Cluster Manager. Cluster=%v", rc.ClusterName)
 	return rcManager, nil
 }
 

@@ -3,6 +3,7 @@ package remotecluster
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -185,7 +186,7 @@ func (c *Controller) healCheck(manager *rcmanager.Manager, wg *sync.WaitGroup) {
 	// todo metrics
 	defer func() {
 		if err := recover(); err != nil {
-			klog.Errorf("healCheck panic. err=%v", err)
+			klog.Errorf("healCheck panic. err=%v\n", err, string(debug.Stack()))
 		}
 	}()
 	defer wg.Done()
