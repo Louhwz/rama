@@ -100,7 +100,7 @@ func NewController(
 	networkInformer informers.NetworkInformer,
 	subnetInformer informers.SubnetInformer,
 	ipInformer informers.IPInstanceInformer) *Controller {
-
+	// todo 啥用
 	runtime.Must(networkingv1.AddToScheme(scheme.Scheme))
 	klog.V(4).Info("Creating event broadcaster")
 	eventBroadcaster := record.NewBroadcaster()

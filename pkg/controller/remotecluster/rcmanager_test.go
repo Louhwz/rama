@@ -7,14 +7,15 @@ import (
 	"testing"
 	"time"
 
-	k8serror "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"k8s.io/apimachinery/pkg/util/wait"
+	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
+	k8serror "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -102,6 +103,31 @@ func TestNilSecret(t *testing.T) {
 	t.Log(secret)
 }
 
+func TestNilList(t *testing.T) {
+	config, err := clientconfig.GetConfig()
+	assert.Nil(t, err)
+	kubeClient := kubernetes.NewForConfigOrDie(config)
+	infFac := informers.NewSharedInformerFactory(kubeClient, 0)
+	secretInformer := infFac.Core().V1().Secrets().Informer()
+	ch := make(chan struct{})
+	go func() {
+		//if ok := cache.WaitForCacheSync(ch, infFac.Core().V1().Secrets().Informer().HasSynced); !ok {
+		if ok := cache.WaitForCacheSync(ch, secretInformer.HasSynced); !ok {
+			t.Errorf("failed to wait for caches to sync")
+		} else {
+			t.Log("wait finish")
+			lister := infFac.Core().V1().Secrets().Lister().Secrets("default")
+			secret, err := lister.List(labels.SelectorFromSet(labels.Set{}))
+			t.Log(err, secret)
+			s, err := lister.Get("default-token-8njl6")
+			t.Log(err, s)
+		}
+	}()
+	go infFac.Start(ch)
+
+	<-ch
+}
+
 func TestWaitUntil(t *testing.T) {
 	ch := make(chan struct{})
 	wait.Until(printHelloWorld, 1*time.Second, ch)
@@ -164,6 +190,21 @@ func TestErrKubeI(t *testing.T) {
 	body, err := kubeClient.DiscoveryClient.RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
 	t.Log(err)
 	t.Log(string(body))
+}
+
+func TestLabelSelector(t *testing.T) {
+	config, err := clientconfig.GetConfig()
+	kubeClient := kubernetes.NewForConfigOrDie(config)
+
+	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
+	//secretInformer := informerFactory.Core().V1().Secrets()
+	secretLister := informerFactory.Core().V1().Secrets().Lister()
+	//queue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "secret")
+	secret, err := secretLister.Secrets("default").Get("hello-world")
+	if k8serror.IsNotFound(err) {
+		t.Log("hello")
+	}
+	t.Log(secret, err)
 }
 
 func TestConnection(t *testing.T) {
@@ -247,9 +288,16 @@ func TestConnection(t *testing.T) {
 		for {
 			if secretInformer.Informer().HasSynced() {
 				i, e := secretInformer.Informer().GetIndexer().ByIndex(ByDefaultNS, "louhwz")
-				assert.Nil(t, e)
+				//assert.Nil(t, e)
+				t.Log(e)
 				//_, _ := jsoniter.MarshalToString(i)
 				t.Log("len=", len(i))
+
+				i, e = secretInformer.Informer().GetIndexer().ByIndex(ByDefaultNS, "louhwz11")
+				//assert.Nil(t, e)
+				t.Log(e)
+				//_, _ := jsoniter.MarshalToString(i)
+				t.Log("len=", len(i), ", second")
 				time.Sleep(1 * time.Second)
 			}
 		}
@@ -267,3 +315,84 @@ func TestDeleteExistResource(t *testing.T) {
 		t.Log("not found")
 	}
 }
+
+func TestNewSelector(t *testing.T) {
+	config, err := clientconfig.GetConfig()
+	assert.Nil(t, err)
+	kubeClient := kubernetes.NewForConfigOrDie(config)
+	infFac := informers.NewSharedInformerFactory(kubeClient, 0)
+	_ = infFac.Core().V1().Secrets().Informer()
+	ch := make(chan struct{})
+	go func() {
+		//if ok := cache.WaitForCacheSync(ch, infFac.Core().V1().Secrets().Informer().HasSynced); !ok {
+		if ok := cache.WaitForCacheSync(ch, infFac.Core().V1().Secrets().Informer().HasSynced); !ok {
+			t.Errorf("failed to wait for caches to sync")
+		} else {
+			t.Log("wait finish")
+			lister := infFac.Core().V1().Secrets().Lister().Secrets("default")
+			secret, err := lister.List(labels.NewSelector())
+			t.Log(err, secret)
+			s, err := lister.Get("default-token-8njl6")
+			t.Log(err, s)
+		}
+	}()
+	go infFac.Start(ch)
+
+	<-ch
+}
+
+func TestRunTimeHandleCrash(t *testing.T) {
+	c()
+	t.Log("yqz")
+}
+
+func c() {
+	defer runtimeutil.HandleCrash()
+
+	panic("hello")
+
+}
+
+func TestRecover(t *testing.T) {
+	err := c2()
+	t.Log("yqz")
+	t.Log(err)
+}
+
+func c2() error {
+	defer func() {
+		if err := recover(); err != nil {
+
+		}
+	}()
+	panic("hello")
+}
+
+//
+//func TestNilIndexer(t *testing.T) {
+//	const IndexName = "index"
+//	config, _ := clientconfig.GetConfig()
+//	kubeClient := kubernetes.NewForConfigOrDie(config)
+//	infFac := informers.NewSharedInformerFactory(kubeClient, 0)
+//	secretInformer := infFac.Core().V1().Secrets().Informer()
+//	secretInformer.GetIndexer().AddIndexers(cache.Indexers{
+//		IndexName:
+//	})
+//	ch := make(chan struct{})
+//	go func() {
+//		//if ok := cache.WaitForCacheSync(ch, infFac.Core().V1().Secrets().Informer().HasSynced); !ok {
+//		if ok := cache.WaitForCacheSync(ch, infFac.Core().V1().Secrets().Informer().HasSynced); !ok {
+//			t.Errorf("failed to wait for caches to sync")
+//		} else {
+//			t.Log("wait finish")
+//			lister := infFac.Core().V1().Secrets().Lister().Secrets("default")
+//			secret, err := lister.List(labels.NewSelector())
+//			t.Log(err, secret)
+//			s, err := lister.Get("default-token-8njl6")
+//			t.Log(err, s)
+//		}
+//	}()
+//	go infFac.Start(ch)
+//
+//	<-ch
+//}

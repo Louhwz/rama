@@ -8,26 +8,26 @@ import (
 
 type Cache struct {
 	mu               sync.RWMutex
-	remoteClusterMap map[uint32]*rcmanager.Manager
+	remoteClusterMap map[string]*rcmanager.Manager
 }
 
-func (c *Cache) Get(clusterID uint32) (manager *rcmanager.Manager, exists bool) {
+func (c *Cache) Get(clusterName string) (manager *rcmanager.Manager, exists bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	manager, exists = c.remoteClusterMap[clusterID]
+	manager, exists = c.remoteClusterMap[clusterName]
 	return
 }
 
-func (c *Cache) Set(key uint32, manager *rcmanager.Manager) {
+func (c *Cache) Set(clusterName string, manager *rcmanager.Manager) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.remoteClusterMap[key] = manager
+	c.remoteClusterMap[clusterName] = manager
 }
 
-func (c *Cache) Del(key uint32) {
+func (c *Cache) Del(clusterName string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// todo any way to release client?
-	delete(c.remoteClusterMap, key)
+	delete(c.remoteClusterMap, clusterName)
 }

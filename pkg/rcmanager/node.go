@@ -3,33 +3,126 @@ package rcmanager
 import (
 	"context"
 	"fmt"
+	"sync"
 
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
 	"github.com/oecp/rama/pkg/utils"
 	apiv1 "k8s.io/api/core/v1"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 )
 
 func (m *Manager) reconcileNode(key string) error {
-	klog.Infof("Starting reconcile node from cluster %v, node name=%v", m.clusterID, key)
+	klog.Infof("Starting reconcile node from cluster %v, node name=%v", m.ClusterName, key)
 	if len(key) == 0 {
 		return nil
 	}
 	_, err := m.nodeLister.Get(key)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
-			name := utils.GenRemoteVtepName(m.clusterID, key)
-			err = m.localClusterKubeClient.CoreV1().Nodes().Delete(context.TODO(), name, metav1.DeleteOptions{})
-			if k8serror.IsNotFound(err) {
-				return nil
-			}
+			vtepName := utils.GenRemoteVtepName(m.ClusterName, key)
+			err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), vtepName, metav1.DeleteOptions{})
 			return err
 		}
 		return err
 	}
+	nodes, err := m.nodeLister.List(labels.NewSelector())
+	if err != nil {
+		return err
+	}
+	vteps, err := m.remoteVtepLister.List(utils.SelectorClusterName(m.ClusterName))
+	if err != nil {
+		return err
+	}
+
+	add, update, remove := m.diffNodeAndVtep(nodes, vteps)
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		for _, v := range add {
+			_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), v, metav1.CreateOptions{})
+			if err != nil {
+				klog.Warningf("Can't create remote vtep in local cluster. err=%v. remote vtep name=%v", err, v.Name)
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for _, v := range update {
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), v, metav1.UpdateOptions{})
+				return err
+			})
+			if err != nil {
+				klog.Warningf("Can't update remote vtep in local cluster. err=%v. name=%v", err, v.Name)
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for _, v := range remove {
+			_ = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), v, metav1.DeleteOptions{})
+			if err != nil && !k8serror.IsNotFound(err) {
+				klog.Warningf("Can't delete remote vtep in local cluster. remote vtep name=%v", v)
+			}
+		}
+	}()
+	wg.Wait()
 	return nil
+}
+
+func (m *Manager) diffNodeAndVtep(nodes []*apiv1.Node, vteps []*networkingv1.RemoteVtep) (
+	add []*networkingv1.RemoteVtep, update []*networkingv1.RemoteVtep, remove []string) {
+	nodeMap := func() map[string]*apiv1.Node {
+		nodeMap := make(map[string]*apiv1.Node)
+		for _, node := range nodes {
+			nodeMap[node.Name] = node
+		}
+		return nodeMap
+	}()
+	vtepMap := func() map[string]*networkingv1.RemoteVtep {
+		vtepMap := make(map[string]*networkingv1.RemoteVtep)
+		for _, vtep := range vteps {
+			vtepMap[vtep.Name] = vtep
+		}
+		return vtepMap
+	}()
+
+	for _, node := range nodes {
+		vtepName := utils.GenRemoteVtepName(m.ClusterName, node.Name)
+		if vtepName == "" {
+			continue
+		}
+		nodeIPList, err := m.nodeToIPList(node.Name)
+		if err != nil {
+			continue
+		}
+		vtepIP := node.Annotations[constants.AnnotationNodeVtepIP]
+		vtepMac := node.Annotations[constants.AnnotationNodeVtepMac]
+		if vtep, exists := vtepMap[vtepName]; exists {
+			if vtep.Spec.VtepIP != vtepIP || vtep.Spec.VtepMAC != vtepMac {
+				v := utils.NewRemoteVtep(m.ClusterName, vtepIP, vtepMac, node.Name, nodeIPList)
+				update = append(update, v)
+			}
+		} else {
+			v := utils.NewRemoteVtep(m.ClusterName, vtepIP, vtepMac, node.Name, nodeIPList)
+			add = append(add, v)
+		}
+	}
+	for _, vtep := range vteps {
+		nodeName := vtep.Spec.NodeName
+		if _, exists := nodeMap[nodeName]; !exists {
+			remove = append(remove, vtep.Name)
+		}
+	}
+	return
 }
 
 func (m *Manager) processNextNode() bool {
@@ -52,10 +145,10 @@ func (m *Manager) processNextNode() bool {
 			// TODO: use retry handler to
 			// Put the item back on the workqueue to handle any transient errors
 			m.nodeQueue.AddRateLimited(key)
-			return fmt.Errorf("[node] fail to sync '%s' for cluster id=%v: %v, requeuing", key, m.clusterID, err)
+			return fmt.Errorf("[node] fail to sync '%s' for cluster =%v: %v, requeuing", key, m.ClusterName, err)
 		}
 		m.nodeQueue.Forget(obj)
-		klog.Infof("[node] succeed to sync '%s', cluster id=%v", key, m.clusterID)
+		klog.Infof("[node] succeed to sync '%s', cluster=%v", key, m.ClusterName)
 		return nil
 	}(obj)
 
@@ -85,14 +178,14 @@ func (m *Manager) addOrDelNode(obj interface{}) {
 func (m *Manager) updateNode(oldObj, newObj interface{}) {
 	oldNode, _ := oldObj.(*apiv1.Node)
 	newNode, _ := newObj.(*apiv1.Node)
-	newNodeLabels := newNode.Labels
-	oldNodeLabels := oldNode.Labels
+	newNodeAnnotations := newNode.Annotations
+	oldNodeAnnotations := oldNode.Annotations
 
-	if newNodeLabels[constants.AnnotationNodeVtepIP] == "" || newNodeLabels[constants.AnnotationNodeVtepMac] == "" {
+	if newNodeAnnotations[constants.AnnotationNodeVtepIP] == "" || newNodeAnnotations[constants.AnnotationNodeVtepMac] == "" {
 		return
 	}
-	if newNodeLabels[constants.AnnotationNodeVtepIP] == oldNodeLabels[constants.AnnotationIP] &&
-		newNodeLabels[constants.AnnotationNodeVtepIP] == oldNodeLabels[constants.AnnotationNodeVtepMac] {
+	if newNodeAnnotations[constants.AnnotationNodeVtepIP] == oldNodeAnnotations[constants.AnnotationIP] &&
+		newNodeAnnotations[constants.AnnotationNodeVtepIP] == oldNodeAnnotations[constants.AnnotationNodeVtepMac] {
 		return
 	}
 	m.enqueueNode(newNode.Name)

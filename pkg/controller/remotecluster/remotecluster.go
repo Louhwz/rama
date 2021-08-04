@@ -3,12 +3,10 @@ package remotecluster
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 
 	jsoniter "github.com/json-iterator/go"
 	v1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"gopkg.in/errgo.v2/fmt/errors"
-	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/klog"
 )
 
@@ -17,45 +15,39 @@ func (c *Controller) filterRemoteCluster(obj interface{}) bool {
 	return ok
 }
 
-func (c *Controller) addRemoteCluster(obj interface{}) {
+func (c *Controller) addOrDelRemoteCluster(obj interface{}) {
 	rc, _ := obj.(*v1.RemoteCluster)
-	c.enqueueRemoteCluster(rc.Spec.ClusterID)
-}
-
-func (c *Controller) deleteRemoteCluster(obj interface{}) {
-	rc, _ := obj.(*v1.RemoteCluster)
-	c.enqueueRemoteCluster(rc.Spec.ClusterID)
+	c.enqueueRemoteCluster(rc.Name)
 }
 
 func (c *Controller) updateRemoteCluster(oldObj, newObj interface{}) {
 	oldRC, _ := oldObj.(*v1.RemoteCluster)
 	newRC, _ := newObj.(*v1.RemoteCluster)
 
-	if oldRC.ResourceVersion == newRC.ResourceVersion {
-		return
-	}
-	if oldRC.Generation == newRC.Generation {
+	if oldRC.ResourceVersion == newRC.ResourceVersion ||
+		oldRC.Generation == newRC.Generation {
 		return
 	}
 	if !remoteClusterSpecChanged(&oldRC.Spec, &newRC.Spec) {
 		return
 	}
-	c.enqueueRemoteCluster(newRC.Spec.ClusterID)
+	c.enqueueRemoteCluster(newRC.ClusterName)
 }
 
-func (c *Controller) enqueueRemoteCluster(clusterID uint32) {
-	c.remoteClusterQueue.Add(clusterID)
+func (c *Controller) enqueueRemoteCluster(clusterName string) {
+	c.remoteClusterQueue.Add(clusterName)
 }
 
-func (c *Controller) reconcileRemoteCluster(key uint32) error {
-	clusterIDStr := strconv.FormatInt(int64(key), 10)
-	remoteCluster, err := c.remoteClusterIndexer.ByIndex(ByRemoteClusterIDIndexer, clusterIDStr)
+// clusterID is unique, webhook will ensure that
+func (c *Controller) reconcileRemoteCluster(clusterName string) error {
+	remoteCluster, err := c.remoteClusterIndexer.ByIndex(ByRemoteClusterIDIndexer, clusterName)
 	switch {
-	case err != nil && k8serror.IsNotFound(err):
-		return c.delRemoteClusterManager(key)
+	case err != nil:
+		return err
 	case len(remoteCluster) != 1:
-		return errors.Newf("get more than one cluster for one cluster id. key=%v", key)
+		return errors.Newf("get more than one cluster for one cluster id. clusterID=%v", clusterName)
 	case len(remoteCluster) == 0:
+		c.delRemoteCluster(clusterName)
 		return nil
 	}
 	rc, ok := remoteCluster[0].(*v1.RemoteCluster)
@@ -68,6 +60,21 @@ func (c *Controller) reconcileRemoteCluster(key uint32) error {
 	return c.addOrUpdateRemoteClusterManager(rc)
 
 }
+
+func (c *Controller) delRemoteCluster(clusterName string) {
+	klog.Infof("deleting clusterID=%v.", clusterName)
+	c.delRemoteClusterManager(clusterName)
+	//c.delAllRemoteClusterResource(clusterName)
+}
+
+//func (c *Controller) delAllRemoteClusterResource(clusterName string) {
+//	err1 := c.ramaClient.NetworkingV1().RemoteVteps().DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{
+//		LabelSelector: utils.SelectorClusterName(clusterName).String(),
+//	})
+//	err2 := c.ramaClient.NetworkingV1().RemoteSubnets().DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{
+//		LabelSelector: utils.SelectorClusterName(clusterName).String(),
+//	})
+//}
 
 func (c *Controller) runRemoteClusterWorker() {
 	for c.processNextRemoteCluster() {
@@ -83,10 +90,10 @@ func (c *Controller) processNextRemoteCluster() bool {
 	err := func(obj interface{}) error {
 		defer c.remoteClusterQueue.Done(obj)
 		var (
-			key uint32
+			key string
 			ok  bool
 		)
-		if key, ok = obj.(uint32); !ok {
+		if key, ok = obj.(string); !ok {
 			c.remoteClusterQueue.Forget(obj)
 			return nil
 		}
@@ -110,13 +117,4 @@ func (c *Controller) processNextRemoteCluster() bool {
 
 func remoteClusterSpecChanged(old, new *v1.RemoteClusterSpec) bool {
 	return !reflect.DeepEqual(old.ConnConfig, new.ConnConfig)
-}
-
-func indexByRemoteClusterID(obj interface{}) ([]string, error) {
-	instance, ok := obj.(*v1.RemoteCluster)
-	if ok {
-		clusterID := instance.Spec.ClusterID
-		return []string{strconv.FormatInt(int64(clusterID), 10)}, nil
-	}
-	return []string{}, nil
 }

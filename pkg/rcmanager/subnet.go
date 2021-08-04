@@ -8,41 +8,40 @@ import (
 	"time"
 
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	"github.com/oecp/rama/pkg/constants"
 	"github.com/oecp/rama/pkg/utils"
 	"gopkg.in/errgo.v2/fmt/errors"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 )
 
 func (m *Manager) reconcileSubnet(key string) error {
-	klog.Infof("Starting reconcile subnet from cluster %v, subnet name=%v", m.clusterID, key)
+	klog.Infof("Starting reconcile subnet from cluster %v, subnet name=%v", m.ClusterName, key)
 	if len(key) == 0 {
 		return nil
 	}
 	subnet, err := m.subnetLister.Get(key)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
-			name := utils.GenRemoteSubnetName(m.clusterID, key)
+			name := utils.GenRemoteSubnetName(m.ClusterName, key)
 			err = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().Delete(context.TODO(), name, metav1.DeleteOptions{})
-			if k8serror.IsNotFound(err) {
-				return nil
-			}
 			return err
 		}
 		return err
 	}
 
-	localClusterSubnets, err := m.localClusterSubnetLister.List(nil)
+	localClusterSubnets, err := m.localClusterSubnetLister.List(labels.NewSelector())
 	if err != nil {
 		return err
 	}
-	localClusterRemoteSubnets, err := m.remoteSubnetLister.List(nil)
+	localClusterRemoteSubnets, err := m.remoteSubnetLister.List(utils.SelectorClusterName(m.ClusterName))
 	if err != nil {
 		return err
 	}
-	remoteClusterSubnets, err := m.subnetLister.List(nil)
+	remoteClusterSubnets, err := m.subnetLister.List(labels.NewSelector())
 	if err != nil {
 		return err
 	}
@@ -56,12 +55,13 @@ func (m *Manager) reconcileSubnet(key string) error {
 
 	add, update, remove := m.diffSubnetAndRCSubnet(remoteClusterSubnets, localClusterRemoteSubnets)
 	var wg sync.WaitGroup
+	wg.Add(3)
 	go func() {
-		wg.Add(1)
+		defer wg.Done()
 		for _, v := range add {
 			rcSubnet, err := m.convertSubnet2RemoteSubnet(v)
 			if err != nil {
-				klog.Warningf("convertSubnet2RemoteSubnet error. err=%v. subnet name=%v. clusterID=%v", err, v.Name, m.clusterID)
+				klog.Warningf("convertSubnet2RemoteSubnet error. err=%v. subnet name=%v. ClusterID=%v", err, v.Name, m.ClusterName)
 				continue
 			}
 			_, err = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().Create(context.TODO(), rcSubnet, metav1.CreateOptions{})
@@ -69,11 +69,10 @@ func (m *Manager) reconcileSubnet(key string) error {
 				klog.Warningf("Can't create remote subnet in local cluster. err=%v. remote subnet name=%v", err, rcSubnet.Name)
 			}
 		}
-		wg.Done()
 	}()
 
 	go func() {
-		wg.Add(1)
+		defer wg.Done()
 		for _, v := range update {
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				_, err := m.localClusterRamaClient.NetworkingV1().RemoteSubnets().Update(context.TODO(), v, metav1.UpdateOptions{})
@@ -83,11 +82,10 @@ func (m *Manager) reconcileSubnet(key string) error {
 				klog.Warningf("Can't update remote subnet in local cluster. err=%v. name=%v", err, v.Name)
 			}
 		}
-		wg.Done()
 	}()
 
 	go func() {
-		wg.Add(1)
+		defer wg.Done()
 		for _, v := range remove {
 			// todo retry
 			_ = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().Delete(context.TODO(), v.Name, metav1.DeleteOptions{})
@@ -95,7 +93,6 @@ func (m *Manager) reconcileSubnet(key string) error {
 				klog.Warningf("Can't delete remote subnet in local cluster. remote subnet name=%v", v.Name)
 			}
 		}
-		wg.Done()
 	}()
 	wg.Wait()
 	return nil
@@ -106,23 +103,26 @@ func (m *Manager) RunSubnetWorker() {
 	}
 }
 
+// validate only in local cluster
 func (m *Manager) validateLocalClusterOverlap(subnet *networkingv1.Subnet, subnets []*networkingv1.Subnet) error {
 	for _, s := range subnets {
 		if utils.Intersect(subnet.Spec.Range.CIDR, subnet.Spec.Range.Version, s.Spec.Range.CIDR, s.Spec.Range.Version) {
 			klog.Warningf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from lcoal cluster, cidr=%v",
-				m.clusterID, subnet.Spec.Range.CIDR, s.Spec.Range.CIDR)
-			return errors.Newf("Overlap network ")
+				m.ClusterName, subnet.Spec.Range.CIDR, s.Spec.Range.CIDR)
+			return errors.Newf("Overlap network. overlap with other local cluster subnet")
 		}
 	}
 	return nil
 }
 
+// validate whether the subnet to be added is conflict with remoteSubnet in localCluster
+// validate between all connected domain expect local cluster
 func (m *Manager) validateRemoteClusterOverlap(subnet *networkingv1.Subnet, rcSubnets []*networkingv1.RemoteSubnet) error {
 	for _, rc := range rcSubnets {
-		if rc.Spec.ClusterID != m.clusterID && utils.Intersect(rc.Spec.CIDR, rc.Spec.Version, subnet.Spec.Range.CIDR, subnet.Spec.Range.Version) {
+		if utils.Intersect(rc.Spec.CIDR, rc.Spec.Version, subnet.Spec.Range.CIDR, subnet.Spec.Range.Version) {
 			klog.Warningf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from cluster %v, cidr=%v",
-				m.clusterID, subnet.Spec.Range.CIDR, rc.Spec.ClusterID, rc.Spec.CIDR)
-			return errors.Newf("Overlap network ")
+				m.ClusterName, subnet.Spec.Range.CIDR, rc.Spec.ClusterName, rc.Spec.CIDR)
+			return errors.Newf("Overlap network. overlap with other remoteSubnet")
 		}
 	}
 	return nil
@@ -140,9 +140,10 @@ func (m *Manager) diffSubnetAndRCSubnet(subnets []*networkingv1.Subnet, rcSubnet
 	}()
 
 	for _, v := range rcSubnets {
-		if v.Spec.ClusterID != m.clusterID {
+		if v.ClusterName != m.ClusterName {
 			continue
 		}
+		// todo remote subnet may generate from multiple subnet, careful
 		subnetName := utils.ExtractSubnetName(v.Name)
 		if subnet, exists := subnetMap[subnetName]; !exists {
 			remove = append(remove, v)
@@ -165,7 +166,7 @@ func (m *Manager) diffSubnetAndRCSubnet(subnets []*networkingv1.Subnet, rcSubnet
 	}()
 
 	for _, s := range subnets {
-		remoteSubnetName := utils.GenRemoteSubnetName(m.clusterID, s.Name)
+		remoteSubnetName := utils.GenRemoteSubnetName(m.ClusterName, s.Name)
 		if _, exists := remoteSubnetMap[remoteSubnetName]; !exists {
 			add = append(add, s)
 		}
@@ -180,13 +181,27 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet) (*netw
 	}
 	rs := &networkingv1.RemoteSubnet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: utils.GenRemoteSubnetName(m.clusterID, subnet.Name),
+			Name: utils.GenRemoteSubnetName(m.ClusterName, subnet.Name),
+			Labels: map[string]string{
+				constants.LabelCluster: m.ClusterName,
+			},
+			// todo
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         "",
+					Kind:               "",
+					Name:               "",
+					UID:                "",
+					Controller:         nil,
+					BlockOwnerDeletion: nil,
+				},
+			},
 		},
 		Spec: networkingv1.RemoteSubnetSpec{
 			Version:      subnet.Spec.Range.Version,
 			CIDR:         subnet.Spec.Range.CIDR,
 			Type:         network.Spec.Type,
-			ClusterID:    m.clusterID,
+			ClusterName:  m.ClusterName,
 			OverlayNetID: network.Spec.NetID,
 		},
 		Status: networkingv1.RemoteSubnetStatus{
@@ -250,10 +265,10 @@ func (m *Manager) processNextSubnet() bool {
 			// TODO: use retry handler to
 			// Put the item back on the workqueue to handle any transient errors
 			m.subnetQueue.AddRateLimited(key)
-			return fmt.Errorf("[subnet] fail to sync '%s' for cluster id=%v: %v, requeuing", key, m.clusterID, err)
+			return fmt.Errorf("[subnet] fail to sync '%s' for cluster id=%v: %v, requeuing", key, m.ClusterName, err)
 		}
 		m.subnetQueue.Forget(obj)
-		klog.Infof("[subnet] succeed to sync '%s', cluster id=%v", key, m.clusterID)
+		klog.Infof("[subnet] succeed to sync '%s', cluster id=%v", key, m.ClusterName)
 		return nil
 	}(obj)
 

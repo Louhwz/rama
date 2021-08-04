@@ -9,8 +9,8 @@ const remoteSubnetNameFormat = "cluster%v.%v"
 
 type RemoteSubnetName string
 
-func GenRemoteSubnetName(clusterID uint32, subnetName string) string {
-	return fmt.Sprintf(remoteSubnetNameFormat, clusterID, subnetName)
+func GenRemoteSubnetName(clusterName string, subnetName string) string {
+	return fmt.Sprintf(remoteSubnetNameFormat, clusterName, subnetName)
 }
 
 func ExtractSubnetName(remoteSubnetName string) string {
