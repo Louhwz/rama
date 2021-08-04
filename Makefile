@@ -1,5 +1,5 @@
-REGISTRY=github/oecp
-ARCHS?=amd64 arm64
+REGISTRY=louhwz
+ARCHS?=amd64
 DEV_TAG?=dev
 RELEASE_TAG?=release
 
