@@ -157,8 +157,11 @@ func (c *Controller) updateRemoteClusterStatus() {
 
 // use remove+add instead of update
 func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteCluster) error {
+	c.remoteClusterManagerCache.mu.Lock()
+	defer c.remoteClusterManagerCache.mu.Unlock()
+
 	clusterName := rc.Name
-	_, exist := c.remoteClusterManagerCache.Get(clusterName)
+	_, exist := c.remoteClusterManagerCache.remoteClusterMap[clusterName]
 	if exist {
 		c.delRemoteClusterManager(clusterName)
 	}

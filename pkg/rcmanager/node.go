@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	jsoniter "github.com/json-iterator/go"
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
 	"github.com/oecp/rama/pkg/utils"
@@ -17,7 +16,7 @@ import (
 	"k8s.io/klog"
 )
 
-// Full update
+// Full update. Update remote vtep expect status
 func (m *Manager) reconcileNode(key string) error {
 	klog.Infof("Starting reconcile node from cluster %v, node name=%v", m.ClusterName, key)
 	nodes, err := m.nodeLister.List(labels.NewSelector())
@@ -28,10 +27,6 @@ func (m *Manager) reconcileNode(key string) error {
 	if err != nil {
 		return err
 	}
-
-	// todo debug
-	s, _ := jsoniter.MarshalToString(vteps)
-	klog.Infof("[Debug] vteps=%v", s)
 
 	add, update, remove := m.diffNodeAndVtep(nodes, vteps)
 	var wg sync.WaitGroup

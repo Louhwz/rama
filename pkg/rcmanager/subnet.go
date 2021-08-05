@@ -186,16 +186,16 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet) (*netw
 				constants.LabelCluster: m.ClusterName,
 			},
 			// todo
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion:         "",
-					Kind:               "",
-					Name:               "",
-					UID:                "",
-					Controller:         nil,
-					BlockOwnerDeletion: nil,
-				},
-			},
+			//OwnerReferences: []metav1.OwnerReference{
+			//	{
+			//		APIVersion:         "",
+			//		Kind:               "",
+			//		Name:               "",
+			//		UID:                "",
+			//		Controller:         nil,
+			//		BlockOwnerDeletion: nil,
+			//	},
+			//},
 		},
 		Spec: networkingv1.RemoteSubnetSpec{
 			Version:      subnet.Spec.Range.Version,

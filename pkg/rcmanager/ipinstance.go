@@ -18,7 +18,7 @@ import (
 )
 
 // reconcile one single node, update/add/remove everything about it's
-// corresponding remote vtep
+// corresponding remote vtep.
 func (m *Manager) reconcileIPInstance(nodeName string) error {
 	klog.Infof("Starting reconcile ipinstance from cluster %v, node name=%v", m.ClusterName, nodeName)
 	if len(nodeName) == 0 {
@@ -36,15 +36,45 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	if err != nil {
 		return err
 	}
-	// todo maybe need create remote vtep
+	vtepIP := node.Annotations[constants.AnnotationNodeVtepIP]
+	vtepMac := node.Annotations[constants.AnnotationNodeVtepMac]
 	remoteVtep, err := m.remoteVtepLister.Get(vtepName)
 	if err != nil {
-		if k8serror.IsNotFound(err) {
-			return nil
+		if !k8serror.IsNotFound(err) {
+			return err
 		}
-		return err
+		remoteVtep = &networkingv1.RemoteVtep{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: vtepName,
+			},
+			Spec: networkingv1.RemoteVtepSpec{
+				ClusterName: m.ClusterName,
+				NodeName:    nodeName,
+				VtepIP:      vtepIP,
+				VtepMAC:     vtepMac,
+			},
+		}
+		remoteVtep, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
 	}
 	remoteVtep = remoteVtep.DeepCopy()
+	curTime := metav1.Now()
+
+	vtepChanged := vtepIP != "" && vtepMac != "" && (vtepIP != remoteVtep.Spec.VtepIP || vtepMac != remoteVtep.Spec.VtepMAC)
+	if vtepChanged {
+		remoteVtep.Spec.VtepIP = vtepIP
+		remoteVtep.Spec.VtepMAC = vtepMac
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			remoteVtep.Status.LastModifyTime = curTime
+			_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+			return err
+		})
+		if err != nil {
+			return err
+		}
+	}
 
 	desired := func() []string {
 		ipList := make([]string, 0)
@@ -65,15 +95,9 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	add := desiredSet.Diff(actualSet)
 	actualSet.Remove(remove)
 	actualSet.Add(add)
-
-	vtepIP := node.Annotations[constants.AnnotationNodeVtepIP]
-	vtepMac := node.Annotations[constants.AnnotationNodeVtepMac]
-	vtepChanged := vtepIP != "" && vtepMac != "" && (vtepIP != remoteVtep.Spec.VtepIP || vtepMac != remoteVtep.Spec.VtepMAC)
-	if remove.Size() == 0 && add.Size() == 0 && !vtepChanged {
+	if remove.Size() == 0 && add.Size() == 0 {
 		return nil
 	}
-	remoteVtep.Spec.VtepIP = vtepIP
-	remoteVtep.Spec.VtepMAC = vtepMac
 	remoteVtep.Status.LastModifyTime = metav1.NewTime(time.Now())
 	remoteVtep.Status.PodIPList = func() []string {
 		ans := make([]string, 0, actualSet.Size())
@@ -82,9 +106,8 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		}
 		return ans
 	}()
-
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+		_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 		return err
 	})
 	return err
@@ -187,6 +210,6 @@ func (m *Manager) updateIPInstance(oldObj, newObj interface{}) {
 	return
 }
 
-func (m *Manager) enqueueIPInstance(instanceName string) {
-	m.IPQueue.Add(instanceName)
+func (m *Manager) enqueueIPInstance(nodeName string) {
+	m.IPQueue.Add(nodeName)
 }

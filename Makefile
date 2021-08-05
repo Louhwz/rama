@@ -1,4 +1,4 @@
-REGISTRY=louhwz
+REGISTRY=registry.cn-hangzhou.aliyuncs.com/louhwz
 ARCHS?=amd64
 DEV_TAG?=dev
 RELEASE_TAG?=release
@@ -16,7 +16,7 @@ release:
 	done
 
 code-gen:
-	cd hack && chmod u+x ./update-codegen.sh &&controller.go:188 ./update-codegen.sh
+	cd hack && chmod u+x ./update-codegen.sh && ./update-codegen.sh
 
 push: build-dev-images
 	docker push ${REGISTRY}/rama:${DEV_TAG}-amd64
