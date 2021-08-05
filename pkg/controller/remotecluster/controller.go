@@ -210,10 +210,8 @@ func (c *Controller) healCheck(manager *rcmanager.Manager, rc *networkingv1.Remo
 	}
 
 	updateCondition := func() {
-		curTime := metav1.Now()
 		conditionChanged := false
 		if len(conditions) != len(rc.Status.Conditions) {
-			rc.Status.Conditions = conditions
 			conditionChanged = true
 		} else {
 			for i := range conditions {
@@ -226,14 +224,16 @@ func (c *Controller) healCheck(manager *rcmanager.Manager, rc *networkingv1.Remo
 				}
 			}
 		}
-		if conditionChanged {
-			for _, v := range rc.Status.Conditions {
-				v.LastTransitionTime = &curTime
+		if !conditionChanged {
+			for i := range rc.Status.Conditions {
+				conditions[i].LastTransitionTime = rc.Status.Conditions[i].LastTransitionTime
 			}
 		}
+		rc.Status.Conditions = conditions
 	}
 	updateCondition()
-	_, err = c.ramaClient.NetworkingV1().RemoteClusters().Update(context.TODO(), rc, metav1.UpdateOptions{})
+
+	_, err = c.ramaClient.NetworkingV1().RemoteClusters().UpdateStatus(context.TODO(), rc, metav1.UpdateOptions{})
 	if err != nil {
 		klog.Warningf("[health check] can't update remote cluster. err=%v", err)
 	}

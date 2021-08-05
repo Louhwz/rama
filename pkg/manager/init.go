@@ -28,7 +28,7 @@ type initFunc func(manager *Manager) error
 
 var initFuncMap = map[string]initFunc{
 	ipam.ControllerName:          initIPAMController,
-	remotecluster.ControllerName: initRCController,
+	remotecluster.ControllerName: initRemoteClusterController,
 }
 
 var ipamController *ipam.Controller
@@ -48,7 +48,7 @@ func initIPAMController(m *Manager) error {
 
 var rcController *remotecluster.Controller
 
-func initRCController(m *Manager) error {
+func initRemoteClusterController(m *Manager) error {
 	rcController = remotecluster.NewController(
 		m.KubeClient,
 		m.RamaClient,

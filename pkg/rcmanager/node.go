@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	jsoniter "github.com/json-iterator/go"
+
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
 	"github.com/oecp/rama/pkg/utils"
@@ -16,20 +18,9 @@ import (
 	"k8s.io/klog"
 )
 
+// Full update
 func (m *Manager) reconcileNode(key string) error {
 	klog.Infof("Starting reconcile node from cluster %v, node name=%v", m.ClusterName, key)
-	if len(key) == 0 {
-		return nil
-	}
-	_, err := m.nodeLister.Get(key)
-	if err != nil {
-		if k8serror.IsNotFound(err) {
-			vtepName := utils.GenRemoteVtepName(m.ClusterName, key)
-			err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), vtepName, metav1.DeleteOptions{})
-			return err
-		}
-		return err
-	}
 	nodes, err := m.nodeLister.List(labels.NewSelector())
 	if err != nil {
 		return err
@@ -38,6 +29,10 @@ func (m *Manager) reconcileNode(key string) error {
 	if err != nil {
 		return err
 	}
+
+	// todo debug
+	s, _ := jsoniter.MarshalToString(vteps)
+	klog.Infof("[Debug] vteps=%v", s)
 
 	add, update, remove := m.diffNodeAndVtep(nodes, vteps)
 	var wg sync.WaitGroup
@@ -117,8 +112,7 @@ func (m *Manager) diffNodeAndVtep(nodes []*apiv1.Node, vteps []*networkingv1.Rem
 		}
 	}
 	for _, vtep := range vteps {
-		nodeName := vtep.Spec.NodeName
-		if _, exists := nodeMap[nodeName]; !exists {
+		if _, exists := nodeMap[vtep.Spec.NodeName]; !exists {
 			remove = append(remove, vtep.Name)
 		}
 	}
