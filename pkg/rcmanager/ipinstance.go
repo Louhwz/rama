@@ -44,6 +44,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		}
 		return err
 	}
+	remoteVtep = remoteVtep.DeepCopy()
 
 	desired := func() []string {
 		ipList := make([]string, 0)

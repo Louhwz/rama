@@ -8,7 +8,6 @@ import (
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/client/clientset/versioned"
 	"github.com/oecp/rama/pkg/client/informers/externalversions"
-	v1 "github.com/oecp/rama/pkg/client/informers/externalversions/networking/v1"
 	listers "github.com/oecp/rama/pkg/client/listers/networking/v1"
 	"github.com/oecp/rama/pkg/utils"
 	"github.com/pkg/errors"
@@ -64,10 +63,8 @@ func NewRemoteClusterManager(
 	localClusterRamaClient versioned.Interface,
 	rc *networkingv1.RemoteCluster,
 	remoteSubnetLister listers.RemoteSubnetLister,
-	remoteSubnetHasSynced cache.InformerSynced,
 	localClusterSubnetLister listers.SubnetLister,
-	localClusterSubnetSynced cache.InformerSynced,
-	remoteVtepInformer v1.RemoteVtepInformer) (*Manager, error) {
+	remoteVtepLister listers.RemoteVtepLister) (*Manager, error) {
 	defer func() {
 		if err := recover(); err != nil {
 			s, _ := jsoniter.MarshalToString(rc)
@@ -103,11 +100,8 @@ func NewRemoteClusterManager(
 		localClusterKubeClient:   localClusterKubeClient,
 		localClusterRamaClient:   localClusterRamaClient,
 		remoteSubnetLister:       remoteSubnetLister,
-		remoteSubnetSynced:       remoteSubnetHasSynced,
 		localClusterSubnetLister: localClusterSubnetLister,
-		localClusterSubnetSynced: localClusterSubnetSynced,
-		remoteVtepLister:         remoteVtepInformer.Lister(),
-		remoteVtepSynced:         remoteVtepInformer.Informer().HasSynced,
+		remoteVtepLister:         remoteVtepLister,
 		KubeClient:               kubeClient,
 		RamaClient:               ramaClient,
 		KubeInformerFactory:      kubeInformerFactory,

@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	jsoniter "github.com/json-iterator/go"
-
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
 	"github.com/oecp/rama/pkg/utils"

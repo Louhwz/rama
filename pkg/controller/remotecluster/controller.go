@@ -50,7 +50,8 @@ type Controller struct {
 	remoteClusterQueue       workqueue.RateLimitingInterface
 	remoteSubnetLister       listers.RemoteSubnetLister
 	remoteSubnetSynced       cache.InformerSynced
-	remoteVtepInformer       informers.RemoteVtepInformer
+	remoteVtepLister         listers.RemoteVtepLister
+	remoteVtepSynced         cache.InformerSynced
 	localClusterSubnetLister listers.SubnetLister
 	localClusterSubnetSynced cache.InformerSynced
 
@@ -86,7 +87,8 @@ func NewController(
 		remoteSubnetSynced:       remoteSubnetInformer.Informer().HasSynced,
 		localClusterSubnetLister: localClusterSubnetInformer.Lister(),
 		localClusterSubnetSynced: localClusterSubnetInformer.Informer().HasSynced,
-		remoteVtepInformer:       remoteVtepInformer,
+		remoteVtepLister:         remoteVtepInformer.Lister(),
+		remoteVtepSynced:         remoteSubnetInformer.Informer().HasSynced,
 		remoteClusterQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
 		rcManagerQueue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "remoteclustermanager"),
 		recorder:                 recorder,
@@ -112,7 +114,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	klog.Infof("Starting %s controller", ControllerName)
 
 	klog.Info("Waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(stopCh, c.remoteClusterSynced, c.remoteSubnetSynced, c.localClusterSubnetSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, c.remoteClusterSynced, c.remoteSubnetSynced, c.localClusterSubnetSynced, c.remoteVtepSynced); !ok {
 		return fmt.Errorf("%s failed to wait for caches to sync", ControllerName)
 	}
 
@@ -161,8 +163,8 @@ func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteClus
 		c.delRemoteClusterManager(clusterName)
 	}
 
-	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, c.ramaClient, rc, c.remoteSubnetLister, c.remoteSubnetSynced,
-		c.localClusterSubnetLister, c.localClusterSubnetSynced, c.remoteVtepInformer)
+	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, c.ramaClient, rc, c.remoteSubnetLister, c.localClusterSubnetLister, c.remoteVtepLister)
+
 	if err != nil || rcManager.RamaClient == nil || rcManager.KubeClient == nil {
 		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig", fmt.Sprintf("Can't connect to remote cluster %v", clusterName))
 		return errors.Errorf("Can't connect to remote cluster %v", clusterName)
