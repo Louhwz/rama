@@ -11,6 +11,12 @@ type Cache struct {
 	remoteClusterMap map[string]*rcmanager.Manager
 }
 
+type ManagerWrapper struct {
+	stopCh chan struct{}
+
+	rcmanager.Manager
+}
+
 func (c *Cache) Get(clusterName string) (manager *rcmanager.Manager, exists bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -30,4 +36,8 @@ func (c *Cache) Del(clusterName string) {
 	defer c.mu.Unlock()
 	// todo any way to release client?
 	delete(c.remoteClusterMap, clusterName)
+}
+
+func (c *Cache) Clear() {
+	//for _,v := range
 }

@@ -2,6 +2,7 @@ package rcmanager
 
 import (
 	"fmt"
+	"runtime/debug"
 
 	jsoniter "github.com/json-iterator/go"
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
@@ -70,7 +71,8 @@ func NewRemoteClusterManager(
 	defer func() {
 		if err := recover(); err != nil {
 			s, _ := jsoniter.MarshalToString(rc)
-			klog.Errorf("Panic hanppened. Can't new remote cluster manager. Maybe wrong kube config. err=%v. remote cluster=%v", err, s)
+			klog.Errorf("Panic hanppened. Can't new remote cluster manager. Maybe wrong kube config. "+
+				"err=%v. remote cluster=%v\n", err, s, debug.Stack())
 		}
 	}()
 
@@ -84,9 +86,9 @@ func NewRemoteClusterManager(
 	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
 	ramaInformerFactory := externalversions.NewSharedInformerFactory(ramaClient, 0)
 
-	networkInformer := ramaInformerFactory.Networking().V1().Networks()
 	nodeInformer := kubeInformerFactory.Core().V1().Nodes()
-	subnetInformer := ramaInformerFactory.Networking().V1().RemoteSubnets()
+	networkInformer := ramaInformerFactory.Networking().V1().Networks()
+	subnetInformer := ramaInformerFactory.Networking().V1().Subnets()
 	ipInformer := ramaInformerFactory.Networking().V1().IPInstances()
 
 	if err := ipInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{

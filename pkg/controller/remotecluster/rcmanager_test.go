@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oecp/rama/pkg/client/clientset/versioned"
+	restclient "k8s.io/client-go/rest"
+
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 
 	jsoniter "github.com/json-iterator/go"
@@ -396,3 +399,14 @@ func c2() error {
 //
 //	<-ch
 //}
+
+func TestNilClientInterface(t *testing.T) {
+	config, err := clientconfig.GetConfig()
+	assert.Nil(t, err)
+	//kubeClient := kubernetes.NewForConfigOrDie(config)
+	ramaClient := versioned.NewForConfigOrDie(restclient.AddUserAgent(config, "Rama"))
+
+	_, err = ramaClient.NetworkingV1().RemoteSubnets().Get(context.TODO(), "subnet", metav1.GetOptions{})
+	assert.Nil(t, err)
+	//t.Log(string(body))
+}

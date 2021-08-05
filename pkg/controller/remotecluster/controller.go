@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	apiv1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/client/clientset/versioned"
 	"github.com/oecp/rama/pkg/client/informers/externalversions"
 	informers "github.com/oecp/rama/pkg/client/informers/externalversions/networking/v1"
@@ -17,6 +17,7 @@ import (
 	"github.com/oecp/rama/pkg/utils"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -65,7 +66,7 @@ func NewController(
 	remoteSubnetInformer informers.RemoteSubnetInformer,
 	localClusterSubnetInformer informers.SubnetInformer,
 	remoteVtepInformer informers.RemoteVtepInformer) *Controller {
-	runtimeutil.Must(apiv1.AddToScheme(scheme.Scheme))
+	runtimeutil.Must(networkingv1.AddToScheme(scheme.Scheme))
 
 	klog.V(4).Info("Creating event broadcaster")
 	eventBroadcaster := record.NewBroadcaster()
@@ -127,7 +128,8 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
-// health checking and resync cache. remote clsuter garbage cache will also be deleted
+// health checking and resync cache. remote cluster is managed by admin, it can be
+// treated as desired states
 func (c *Controller) updateRemoteClusterStatus() {
 	remoteClusters, err := c.remoteClusterLister.List(labels.NewSelector())
 	if err != nil {
@@ -136,22 +138,23 @@ func (c *Controller) updateRemoteClusterStatus() {
 	}
 
 	var wg sync.WaitGroup
-	for _, obj := range remoteClusters {
-		manager, exists := c.remoteClusterManagerCache.Get(obj.Name)
+	for _, rc := range remoteClusters {
+		manager, exists := c.remoteClusterManagerCache.Get(rc.Name)
 		if !exists {
-			if err = c.addOrUpdateRemoteClusterManager(obj); err != nil {
+			// error happened this time, add next time
+			if err = c.addOrUpdateRemoteClusterManager(rc); err != nil {
 				continue
 			}
 		}
 		wg.Add(1)
-		go c.healCheck(manager, &wg)
+		go c.healCheck(manager, rc, &wg)
 	}
 	wg.Wait()
 	klog.Info("Update Remote Cluster Status Finished.")
 }
 
 // use remove+add instead of update
-func (c *Controller) addOrUpdateRemoteClusterManager(rc *apiv1.RemoteCluster) error {
+func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteCluster) error {
 	clusterName := rc.Name
 	_, exist := c.remoteClusterManagerCache.Get(clusterName)
 	if exist {
@@ -182,29 +185,58 @@ func (c *Controller) addOrUpdateRemoteClusterManager(rc *apiv1.RemoteCluster) er
 	return nil
 }
 
-func (c *Controller) healCheck(manager *rcmanager.Manager, wg *sync.WaitGroup) {
+func (c *Controller) healCheck(manager *rcmanager.Manager, rc *networkingv1.RemoteCluster, wg *sync.WaitGroup) {
+	rc = rc.DeepCopy()
 	// todo metrics
 	defer func() {
 		if err := recover(); err != nil {
-			klog.Errorf("healCheck panic. err=%v\n", err, string(debug.Stack()))
+			klog.Errorf("healCheck panic. err=%v\n%v", err, string(debug.Stack()))
 		}
 	}()
 	defer wg.Done()
 
-	conditions := apiv1.RemoteClusterStatus{Conditions: make([]apiv1.ClusterCondition, 0)}
+	conditions := make([]networkingv1.ClusterCondition, 0)
 
 	body, err := manager.KubeClient.DiscoveryClient.RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
 	if err != nil {
 		runtimeutil.HandleError(errors.Wrapf(err, "Cluster Health Check failed for cluster %v", manager.ClusterName))
-		conditions.Conditions = append(conditions.Conditions, utils.NewClusterOffline(err))
+		conditions = append(conditions, utils.NewClusterOffline(err))
 	} else {
 		if !strings.EqualFold(string(body), "ok") {
-			conditions.Conditions = append(conditions.Conditions, utils.NewClusterNotReady(err), utils.NewClusterNotOffline())
+			conditions = append(conditions, utils.NewClusterNotReady(err), utils.NewClusterNotOffline())
 		} else {
-			conditions.Conditions = append(conditions.Conditions, utils.NewClusterReady())
+			conditions = append(conditions, utils.NewClusterReady())
 		}
 	}
 
+	updateCondition := func() {
+		curTime := metav1.Now()
+		conditionChanged := false
+		if len(conditions) != len(rc.Status.Conditions) {
+			rc.Status.Conditions = conditions
+			conditionChanged = true
+		} else {
+			for i := range conditions {
+				if conditions[i].Status == rc.Status.Conditions[i].Status &&
+					conditions[i].Type == rc.Status.Conditions[i].Type {
+					continue
+				} else {
+					conditionChanged = true
+					break
+				}
+			}
+		}
+		if conditionChanged {
+			for _, v := range rc.Status.Conditions {
+				v.LastTransitionTime = &curTime
+			}
+		}
+	}
+	updateCondition()
+	_, err = c.ramaClient.NetworkingV1().RemoteClusters().Update(context.TODO(), rc, metav1.UpdateOptions{})
+	if err != nil {
+		klog.Warningf("[health check] can't update remote cluster. err=%v", err)
+	}
 	return
 }
 
