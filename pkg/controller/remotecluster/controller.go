@@ -163,7 +163,7 @@ func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteClus
 	clusterName := rc.Name
 	_, exist := c.remoteClusterManagerCache.remoteClusterMap[clusterName]
 	if exist {
-		c.delRemoteClusterManager(clusterName)
+		delete(c.remoteClusterManagerCache.remoteClusterMap, clusterName)
 	}
 
 	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, c.ramaClient, rc, c.remoteSubnetLister, c.localClusterSubnetLister, c.remoteVtepLister)
@@ -185,7 +185,7 @@ func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteClus
 	//	klog.Errorf()
 	//	return errors.Newf()
 	//}
-	c.remoteClusterManagerCache.Set(clusterName, rcManager)
+	c.remoteClusterManagerCache.remoteClusterMap[clusterName] = rcManager
 	c.rcManagerQueue.Add(clusterName)
 	return nil
 }
