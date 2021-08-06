@@ -260,7 +260,8 @@ type RemoteSubnetSpec struct {
 	Range       AddressRange `json:"range"`
 	Type        NetworkType  `json:"type"`
 	ClusterName string       `json:"clusterName"`
-	TunnelNetID *uint32      `json:"tunnelNetID"`
+	// If the corresponding subnet is in underlay network, it will be set to nil
+	TunnelNetID *uint32 `json:"tunnelNetID"`
 }
 
 // RemoteSubnetStatus is the status for a RemoteSubnet resource
@@ -294,11 +295,11 @@ type RemoteVtep struct {
 
 // RemoteVtepSpec is the spec for a RemoteVtep resource
 type RemoteVtepSpec struct {
-	ClusterName string   `json:"clusterName"`
-	NodeName    string   `json:"nodeName"`
-	VtepIP      string   `json:"vtepIP"`
-	VtepMAC     string   `json:"vtepMAC"`
-	IPList      []string `json:"ipList"`
+	ClusterName    string   `json:"clusterName"`
+	NodeName       string   `json:"nodeName"`
+	VtepIP         string   `json:"vtepIP"`
+	VtepMAC        string   `json:"vtepMAC"`
+	EndpointIPList []string `json:"endpointIPList"`
 }
 
 // RemoteVtepStatus is the status for a RemoteVtep resource
