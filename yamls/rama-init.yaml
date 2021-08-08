@@ -236,7 +236,7 @@ spec:
     singular: remotecluster
     kind: RemoteCluster
     shortNames:
-      - remotecluster
+      - rcc
   subresources:
     status: {}
   additionalPrinterColumns:
@@ -258,7 +258,7 @@ spec:
     singular: remotesubnet
     kind: RemoteSubnet
     shortNames:
-      - remotesubnet
+      - rcs
   subresources:
     status: {}
   additionalPrinterColumns:
@@ -295,7 +295,7 @@ spec:
     singular: remotevtep
     kind: RemoteVtep
     shortNames:
-      - remotevtep
+      - rcv
   subresources:
     status: {}
   additionalPrinterColumns:
