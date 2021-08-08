@@ -87,7 +87,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		}
 		return ipList
 	}()
-	actual := remoteVtep.Status.PodIPList
+	actual := remoteVtep.Spec.IPList
 	desiredSet := gset.NewFrom(desired)
 	actualSet := gset.NewFrom(actual)
 
@@ -99,7 +99,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		return nil
 	}
 	remoteVtep.Status.LastModifyTime = metav1.NewTime(time.Now())
-	remoteVtep.Status.PodIPList = func() []string {
+	remoteVtep.Spec.IPList = func() []string {
 		ans := make([]string, 0, actualSet.Size())
 		for _, v := range actualSet.Slice() {
 			ans = append(ans, fmt.Sprint(v))

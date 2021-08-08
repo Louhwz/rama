@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,9 +30,9 @@ func NewRemoteVtep(clusterName, vtepIP, macAddr, nodeName string, podIPList []st
 			NodeName:    nodeName,
 			VtepIP:      vtepIP,
 			VtepMAC:     macAddr,
+			IPList:      podIPList,
 		},
 		Status: networkingv1.RemoteVtepStatus{
-			PodIPList:      podIPList,
 			LastModifyTime: metav1.Now(),
 		},
 	}

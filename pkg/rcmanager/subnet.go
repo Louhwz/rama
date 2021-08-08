@@ -87,7 +87,6 @@ func (m *Manager) reconcileSubnet(key string) error {
 	go func() {
 		defer wg.Done()
 		for _, v := range remove {
-			// todo retry
 			_ = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().Delete(context.TODO(), v.Name, metav1.DeleteOptions{})
 			if err != nil && !k8serror.IsNotFound(err) {
 				klog.Warningf("Can't delete remote subnet in local cluster. remote subnet name=%v", v.Name)
@@ -119,9 +118,9 @@ func (m *Manager) validateLocalClusterOverlap(subnet *networkingv1.Subnet, subne
 // validate between all connected domain expect local cluster
 func (m *Manager) validateRemoteClusterOverlap(subnet *networkingv1.Subnet, rcSubnets []*networkingv1.RemoteSubnet) error {
 	for _, rc := range rcSubnets {
-		if utils.Intersect(rc.Spec.CIDR, rc.Spec.Version, subnet.Spec.Range.CIDR, subnet.Spec.Range.Version) {
+		if utils.Intersect(rc.Spec.Range.CIDR, rc.Spec.Range.Version, subnet.Spec.Range.CIDR, subnet.Spec.Range.Version) {
 			klog.Warningf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from cluster %v, cidr=%v",
-				m.ClusterName, subnet.Spec.Range.CIDR, rc.Spec.ClusterName, rc.Spec.CIDR)
+				m.ClusterName, subnet.Spec.Range.CIDR, rc.Spec.ClusterName, rc.Spec.Range.CIDR)
 			return errors.Newf("Overlap network. overlap with other remoteSubnet")
 		}
 	}
@@ -198,11 +197,10 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet) (*netw
 			//},
 		},
 		Spec: networkingv1.RemoteSubnetSpec{
-			Version:      subnet.Spec.Range.Version,
-			CIDR:         subnet.Spec.Range.CIDR,
-			Type:         network.Spec.Type,
-			ClusterName:  m.ClusterName,
-			OverlayNetID: network.Spec.NetID,
+			Range:       subnet.Spec.Range,
+			Type:        network.Spec.Type,
+			ClusterName: m.ClusterName,
+			TunnelNetID: network.Spec.NetID,
 		},
 		Status: networkingv1.RemoteSubnetStatus{
 			LastModifyTime: metav1.NewTime(time.Now()),
