@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
+	"k8s.io/utils/pointer"
 )
 
 func (m *Manager) reconcileSubnet(key string) error {
@@ -209,16 +210,16 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet, networ
 				constants.LabelCluster: m.ClusterName,
 				constants.LabelSubnet:  subnet.Name,
 			},
-			//OwnerReferences: []metav1.OwnerReference{
-			//	{
-			//		APIVersion:         "",
-			//		Kind:               "",
-			//		Name:               "",
-			//		UID:                "",
-			//		Controller:         nil,
-			//		BlockOwnerDeletion: ,
-			//	},
-			//},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					// todo
+					APIVersion: "networking.alibaba.com/v1",
+					Kind:       "remotecluster",
+					Name:       m.ClusterName,
+					UID:        m.UID,
+					Controller: pointer.BoolPtr(true),
+				},
+			},
 		},
 		Spec: networkingv1.RemoteSubnetSpec{
 			Range:       subnet.Spec.Range,

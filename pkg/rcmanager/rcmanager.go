@@ -11,6 +11,7 @@ import (
 	listers "github.com/oecp/rama/pkg/client/listers/networking/v1"
 	"github.com/oecp/rama/pkg/utils"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
 	kubeclientset "k8s.io/client-go/kubernetes"
 	corev1 "k8s.io/client-go/listers/core/v1"
@@ -29,6 +30,7 @@ const (
 
 type Manager struct {
 	ClusterName              string
+	UID                      types.UID
 	StopCh                   chan struct{}
 	localClusterKubeClient   kubeclientset.Interface
 	localClusterRamaClient   versioned.Interface
@@ -100,6 +102,7 @@ func NewRemoteClusterManager(
 
 	rcManager := &Manager{
 		ClusterName:              rc.Name,
+		UID:                      rc.UID,
 		StopCh:                   stopCh,
 		localClusterKubeClient:   localClusterKubeClient,
 		localClusterRamaClient:   localClusterRamaClient,
