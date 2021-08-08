@@ -157,6 +157,7 @@ func (c *Controller) updateRemoteClusterStatus() {
 
 // use remove+add instead of update
 func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteCluster) error {
+	// lock in function range to avoid renewing cluster manager when newing one
 	c.remoteClusterManagerCache.mu.Lock()
 	defer c.remoteClusterManagerCache.mu.Unlock()
 

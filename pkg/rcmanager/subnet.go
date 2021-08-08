@@ -67,6 +67,11 @@ func (m *Manager) reconcileSubnet(key string) error {
 			_, err = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().Create(context.TODO(), rcSubnet, metav1.CreateOptions{})
 			if err != nil {
 				klog.Warningf("Can't create remote subnet in local cluster. err=%v. remote subnet name=%v", err, rcSubnet.Name)
+				continue
+			}
+			_, err = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), rcSubnet, metav1.UpdateOptions{})
+			if err != nil {
+				klog.Warningf("Can't UpdateStatus remote subnet in local cluster. err=%v. remote subnet name=%v", err, rcSubnet.Name)
 			}
 		}
 	}()
@@ -80,6 +85,11 @@ func (m *Manager) reconcileSubnet(key string) error {
 			})
 			if err != nil {
 				klog.Warningf("Can't update remote subnet in local cluster. err=%v. name=%v", err, v.Name)
+				continue
+			}
+			_, err = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), v, metav1.UpdateOptions{})
+			if err != nil {
+				klog.Warningf("Can't UpdateStatus remote subnet in local cluster. err=%v. remote subnet name=%v", err, v.Name)
 			}
 		}
 	}()
@@ -142,9 +152,7 @@ func (m *Manager) diffSubnetAndRCSubnet(subnets []*networkingv1.Subnet, rcSubnet
 		if v.ClusterName != m.ClusterName {
 			continue
 		}
-		// todo remote subnet may generate from multiple subnet, careful
-		subnetName := utils.ExtractSubnetName(v.Name)
-		if subnet, exists := subnetMap[subnetName]; !exists {
+		if subnet, exists := subnetMap[v.Name]; !exists {
 			remove = append(remove, v)
 		} else {
 			newestRemoteSubnet, err := m.convertSubnet2RemoteSubnet(subnet)
@@ -183,6 +191,7 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet) (*netw
 			Name: utils.GenRemoteSubnetName(m.ClusterName, subnet.Name),
 			Labels: map[string]string{
 				constants.LabelCluster: m.ClusterName,
+				constants.LabelSubnet:  subnet.Name,
 			},
 			// todo
 			//OwnerReferences: []metav1.OwnerReference{
