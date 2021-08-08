@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/gogf/gf/container/gset"
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
@@ -28,54 +27,37 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	node, err := m.nodeLister.Get(nodeName)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
-			return m.localClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), vtepName, metav1.DeleteOptions{})
+			err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), vtepName, metav1.DeleteOptions{})
+			if k8serror.IsNotFound(err) {
+				return nil
+			} else {
+				return err
+			}
 		}
-		return err
-	}
-	instances, err := m.IPLister.List(labels.SelectorFromSet(labels.Set{constants.LabelNode: nodeName}))
-	if err != nil {
 		return err
 	}
 	vtepIP := node.Annotations[constants.AnnotationNodeVtepIP]
 	vtepMac := node.Annotations[constants.AnnotationNodeVtepMac]
+	instances, err := m.IPLister.List(labels.SelectorFromSet(labels.Set{constants.LabelNode: nodeName}))
+	if err != nil {
+		return err
+	}
+	newVtep := false
+
 	remoteVtep, err := m.remoteVtepLister.Get(vtepName)
 	if err != nil {
 		if !k8serror.IsNotFound(err) {
 			return err
 		}
-		remoteVtep = &networkingv1.RemoteVtep{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: vtepName,
-			},
-			Spec: networkingv1.RemoteVtepSpec{
-				ClusterName: m.ClusterName,
-				NodeName:    nodeName,
-				VtepIP:      vtepIP,
-				VtepMAC:     vtepMac,
-			},
-		}
-		remoteVtep, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
-		if err != nil {
-			return err
-		}
+		remoteVtep = utils.NewRemoteVtep(m.ClusterName, vtepIP, vtepMac, node.Name, nil)
+		newVtep = true
 	}
-	remoteVtep = remoteVtep.DeepCopy()
 	curTime := metav1.Now()
+	remoteVtep = remoteVtep.DeepCopy()
 
-	vtepChanged := vtepIP != "" && vtepMac != "" && (vtepIP != remoteVtep.Spec.VtepIP || vtepMac != remoteVtep.Spec.VtepMAC)
-	if vtepChanged {
-		remoteVtep.Spec.VtepIP = vtepIP
-		remoteVtep.Spec.VtepMAC = vtepMac
-		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			remoteVtep.Status.LastModifyTime = curTime
-			_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
-			return err
-		})
-		if err != nil {
-			return err
-		}
-	}
-
+	remoteVtep.Spec.VtepIP = vtepIP
+	remoteVtep.Spec.VtepMAC = vtepMac
+	remoteVtep.Status.LastModifyTime = curTime
 	desired := func() []string {
 		ipList := make([]string, 0)
 		for _, v := range instances {
@@ -95,10 +77,12 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	add := desiredSet.Diff(actualSet)
 	actualSet.Remove(remove)
 	actualSet.Add(add)
-	if remove.Size() == 0 && add.Size() == 0 {
+
+	vtepChanged := vtepIP != "" && vtepMac != "" && (vtepIP != remoteVtep.Spec.VtepIP || vtepMac != remoteVtep.Spec.VtepMAC)
+	ipListChanged := remove.Size() == 0 || add.Size() == 0
+	if !newVtep && !ipListChanged && !vtepChanged {
 		return nil
 	}
-	remoteVtep.Status.LastModifyTime = metav1.NewTime(time.Now())
 	remoteVtep.Spec.IPList = func() []string {
 		ans := make([]string, 0, actualSet.Size())
 		for _, v := range actualSet.Slice() {
@@ -107,7 +91,18 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		return ans
 	}()
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+		if newVtep {
+			_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
+			if err != nil {
+				return err
+			}
+		} else {
+			_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+			if err != nil {
+				return err
+			}
+		}
+		_, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 		return err
 	})
 	return err
@@ -202,9 +197,13 @@ func (m *Manager) updateIPInstance(oldObj, newObj interface{}) {
 	if newInstance.Status.Phase == networkingv1.IPPhaseReserved && oldInstance.Status.Phase == networkingv1.IPPhaseReserved {
 		return
 	}
-	if newInstance.Spec.Address.IP != oldInstance.Spec.Address.IP ||
-		newInstance.Status.NodeName != oldInstance.Status.NodeName {
+	if newInstance.Status.NodeName != oldInstance.Status.NodeName {
 		m.enqueueIPInstance(oldInstance.Status.NodeName)
+		m.enqueueIPInstance(newInstance.Status.NodeName)
+		return
+	}
+
+	if newInstance.Spec.Address.IP != oldInstance.Spec.Address.IP {
 		m.enqueueIPInstance(newInstance.Status.NodeName)
 	}
 	return

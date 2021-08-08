@@ -16,6 +16,8 @@ import (
 	"k8s.io/klog"
 )
 
+const ReconcileNode = "reconcile-node"
+
 // Full update. Update remote vtep expect status
 func (m *Manager) reconcileNode(key string) error {
 	klog.Infof("Starting reconcile node from cluster %v, node name=%v", m.ClusterName, key)
@@ -129,7 +131,7 @@ func (m *Manager) processNextNode() bool {
 			m.nodeQueue.Forget(obj)
 			return nil
 		}
-		if err := m.reconcileNode(key); err != nil {
+		if err := m.reconcileNode(ReconcileNode); err != nil {
 			// TODO: use retry handler to
 			// Put the item back on the workqueue to handle any transient errors
 			m.nodeQueue.AddRateLimited(key)

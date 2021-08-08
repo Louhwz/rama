@@ -29,6 +29,7 @@ const (
 
 type Manager struct {
 	ClusterName              string
+	StopCh                   chan struct{}
 	localClusterKubeClient   kubeclientset.Interface
 	localClusterRamaClient   versioned.Interface
 	remoteSubnetLister       listers.RemoteSubnetLister
@@ -73,6 +74,8 @@ func NewRemoteClusterManager(
 		}
 	}()
 
+	stopCh := make(chan struct{})
+
 	config, err := utils.BuildClusterConfig(rc)
 	if err != nil {
 		return nil, err
@@ -97,6 +100,7 @@ func NewRemoteClusterManager(
 
 	rcManager := &Manager{
 		ClusterName:              rc.Name,
+		StopCh:                   stopCh,
 		localClusterKubeClient:   localClusterKubeClient,
 		localClusterRamaClient:   localClusterRamaClient,
 		remoteSubnetLister:       remoteSubnetLister,
@@ -149,7 +153,7 @@ func NewRemoteClusterManager(
 		},
 	})
 	rcManager.localClusterKubeClient = localClusterKubeClient
-	klog.Infof("Successfully New Remote Cluster Manager. Cluster=%v", rc.ClusterName)
+	klog.Infof("Successfully New Remote Cluster Manager. Cluster=%v", rc.Name)
 	return rcManager, nil
 }
 

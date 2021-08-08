@@ -126,8 +126,17 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 
 	<-stopCh
 
+	c.closeRemoteClusterManager()
+
 	klog.Info("Shutting down workers")
 	return nil
+}
+
+func (c *Controller) closeRemoteClusterManager() {
+	// no need to lock
+	for _, rcManager := range c.remoteClusterManagerCache.remoteClusterMap {
+		close(rcManager.StopCh)
+	}
 }
 
 // health checking and resync cache. remote cluster is managed by admin, it can be
@@ -149,6 +158,7 @@ func (c *Controller) updateRemoteClusterStatus() {
 			}
 		}
 		wg.Add(1)
+		// todo maybe some clever way
 		go c.healCheck(manager, rc, &wg)
 	}
 	wg.Wait()
@@ -174,18 +184,6 @@ func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteClus
 		return errors.Errorf("Can't connect to remote cluster %v", clusterName)
 	}
 
-	//err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-	//	clusterIDStr := strconv.FormatInt(int64(clusterName), 10)
-	//	rcs, err := c.remoteClusterIndexer.ByIndex(ByRemoteClusterIDIndexer, clusterIDStr)
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//})
-	//if err != nil {
-	//	klog.Errorf()
-	//	return errors.Newf()
-	//}
 	c.remoteClusterManagerCache.remoteClusterMap[clusterName] = rcManager
 	c.rcManagerQueue.Add(clusterName)
 	return nil
@@ -279,16 +277,18 @@ func (c *Controller) startRemoteClusterManager(stopCh <-chan struct{}) bool {
 		return true
 	}
 	klog.Infof("Start single remote cluster manager. clusterName=%v", clusterName)
+
+	managerCh := rcManager.StopCh
 	go func() {
 		if ok := cache.WaitForCacheSync(stopCh, rcManager.NodeSynced, rcManager.SubnetSynced, rcManager.IPSynced); !ok {
 			klog.Errorf("failed to wait for remote cluster caches to sync. clusterName=%v", clusterName)
 			return
 		}
-		go wait.Until(rcManager.RunNodeWorker, 1*time.Second, stopCh)
-		go wait.Until(rcManager.RunSubnetWorker, 1*time.Second, stopCh)
-		go wait.Until(rcManager.RunIPInstanceWorker, 1*time.Second, stopCh)
+		go wait.Until(rcManager.RunNodeWorker, 1*time.Second, managerCh)
+		go wait.Until(rcManager.RunSubnetWorker, 1*time.Second, managerCh)
+		go wait.Until(rcManager.RunIPInstanceWorker, 1*time.Second, managerCh)
 	}()
-	go rcManager.KubeInformerFactory.Start(stopCh)
-	go rcManager.RamaInformerFactory.Start(stopCh)
+	go rcManager.KubeInformerFactory.Start(managerCh)
+	go rcManager.RamaInformerFactory.Start(managerCh)
 	return true
 }
