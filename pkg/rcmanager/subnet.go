@@ -58,12 +58,10 @@ func (m *Manager) reconcileSubnet(key string) error {
 	}()
 
 	if err = m.validateRemoteClusterOverlap(subnet, localClusterRemoteSubnets); err != nil {
-		// return nil to avoid INFINITE loop
-		return nil
+		return err
 	}
 	if err = m.validateLocalClusterOverlap(subnet, localClusterSubnets); err != nil {
-		// return nil to avoid INFINITE loop
-		return nil
+		return err
 	}
 
 	add, update, remove := m.diffSubnetAndRCSubnet(remoteClusterSubnets, localClusterRemoteSubnets, networkMap)
@@ -143,6 +141,9 @@ func (m *Manager) validateLocalClusterOverlap(subnet *networkingv1.Subnet, subne
 // validate between all connected domain expect local cluster
 func (m *Manager) validateRemoteClusterOverlap(subnet *networkingv1.Subnet, rcSubnets []*networkingv1.RemoteSubnet) error {
 	for _, rc := range rcSubnets {
+		if rc.Name == utils.GenRemoteSubnetName(m.ClusterName, subnet.Name) {
+			continue
+		}
 		if utils.Intersect(rc.Spec.Range.CIDR, rc.Spec.Range.Version, subnet.Spec.Range.CIDR, subnet.Spec.Range.Version) {
 			klog.Warningf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from cluster %v, cidr=%v",
 				m.ClusterName, subnet.Spec.Range.CIDR, rc.Spec.ClusterName, rc.Spec.Range.CIDR)

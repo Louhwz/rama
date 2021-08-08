@@ -244,11 +244,6 @@ func (c *Controller) healCheck(manager *rcmanager.Manager, rc *networkingv1.Remo
 	return
 }
 
-func (c *Controller) delRemoteClusterManager(clusterName string) {
-	c.remoteClusterManagerCache.Del(clusterName)
-	klog.Infof("Delete remote cluster cache. key=%v", clusterName)
-}
-
 func (c *Controller) processRCManagerQueue(stopCh <-chan struct{}) {
 	for c.startRemoteClusterManager(stopCh) {
 	}

@@ -34,6 +34,8 @@ func (c *Cache) Set(clusterName string, manager *rcmanager.Manager) {
 func (c *Cache) Del(clusterName string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// todo any way to release client?
-	delete(c.remoteClusterMap, clusterName)
+	if rc, exists := c.remoteClusterMap[clusterName]; exists {
+		close(rc.StopCh)
+		delete(c.remoteClusterMap, clusterName)
+	}
 }
