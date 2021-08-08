@@ -162,7 +162,6 @@ func (c *Controller) updateRemoteClusterStatus() {
 		go c.healCheck(manager, rc, &wg)
 	}
 	wg.Wait()
-	klog.Info("Update Remote Cluster Status Finished.")
 }
 
 // use remove+add instead of update
@@ -172,10 +171,7 @@ func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteClus
 	defer c.remoteClusterManagerCache.mu.Unlock()
 
 	clusterName := rc.Name
-	_, exist := c.remoteClusterManagerCache.remoteClusterMap[clusterName]
-	if exist {
-		delete(c.remoteClusterManagerCache.remoteClusterMap, clusterName)
-	}
+	c.remoteClusterManagerCache.Del(clusterName)
 
 	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, c.ramaClient, rc, c.remoteSubnetLister, c.localClusterSubnetLister, c.remoteVtepLister)
 

@@ -49,7 +49,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		if !k8serror.IsNotFound(err) {
 			return err
 		}
-		remoteVtep = utils.NewRemoteVtep(m.ClusterName, vtepIP, vtepMac, node.Name, nil)
+		remoteVtep = utils.NewRemoteVtep(m.ClusterName, m.UID, vtepIP, vtepMac, node.Name, nil)
 		newVtep = true
 	}
 	curTime := metav1.Now()

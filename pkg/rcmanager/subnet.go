@@ -212,9 +212,8 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet, networ
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					// todo
-					APIVersion: "networking.alibaba.com/v1",
-					Kind:       "remotecluster",
+					APIVersion: networkingv1.SchemeGroupVersion.String(),
+					Kind:       "RemoteCluster",
 					Name:       m.ClusterName,
 					UID:        m.UID,
 					Controller: pointer.BoolPtr(true),
