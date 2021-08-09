@@ -75,7 +75,7 @@ func NewRemoteClusterManager(
 				"err=%v. remote cluster=%v\n", err, s, debug.Stack())
 		}
 	}()
-
+	klog.Infof("NewRemoteClusterManager %v", rc.Name)
 	stopCh := make(chan struct{})
 
 	config, err := utils.BuildClusterConfig(rc)

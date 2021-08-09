@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/oecp/rama/pkg/rcmanager"
+	"k8s.io/klog"
 )
 
 type Cache struct {
@@ -35,6 +36,7 @@ func (c *Cache) Del(clusterName string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if rc, exists := c.remoteClusterMap[clusterName]; exists {
+		klog.Infof("Delete cluster %v from cache", clusterName)
 		close(rc.StopCh)
 		delete(c.remoteClusterMap, clusterName)
 	}

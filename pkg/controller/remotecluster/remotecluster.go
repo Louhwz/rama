@@ -4,24 +4,24 @@ import (
 	"fmt"
 	"reflect"
 
-	v1 "github.com/oecp/rama/pkg/apis/networking/v1"
+	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/klog"
 )
 
 func (c *Controller) filterRemoteCluster(obj interface{}) bool {
-	_, ok := obj.(*v1.RemoteCluster)
+	_, ok := obj.(*networkingv1.RemoteCluster)
 	return ok
 }
 
 func (c *Controller) addOrDelRemoteCluster(obj interface{}) {
-	rc, _ := obj.(*v1.RemoteCluster)
+	rc, _ := obj.(*networkingv1.RemoteCluster)
 	c.enqueueRemoteCluster(rc.Name)
 }
 
 func (c *Controller) updateRemoteCluster(oldObj, newObj interface{}) {
-	oldRC, _ := oldObj.(*v1.RemoteCluster)
-	newRC, _ := newObj.(*v1.RemoteCluster)
+	oldRC, _ := oldObj.(*networkingv1.RemoteCluster)
+	newRC, _ := newObj.(*networkingv1.RemoteCluster)
 
 	if oldRC.ResourceVersion == newRC.ResourceVersion ||
 		oldRC.Generation == newRC.Generation {
@@ -39,6 +39,7 @@ func (c *Controller) enqueueRemoteCluster(clusterName string) {
 
 // remote cluster is managed by admin, no need to full synchronize
 func (c *Controller) reconcileRemoteCluster(clusterName string) error {
+	klog.Infof("Reconciling Remote Cluster %v", clusterName)
 	remoteCluster, err := c.remoteClusterLister.Get(clusterName)
 	if err != nil {
 		if k8serror.IsNotFound(err) {
@@ -94,6 +95,6 @@ func (c *Controller) processNextRemoteCluster() bool {
 	return true
 }
 
-func remoteClusterSpecChanged(old, new *v1.RemoteClusterSpec) bool {
+func remoteClusterSpecChanged(old, new *networkingv1.RemoteClusterSpec) bool {
 	return !reflect.DeepEqual(old.ConnConfig, new.ConnConfig)
 }

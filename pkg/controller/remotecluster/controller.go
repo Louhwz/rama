@@ -114,7 +114,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	klog.Infof("Starting %s controller", ControllerName)
 
 	klog.Info("Waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(stopCh, c.remoteClusterSynced, c.remoteSubnetSynced, c.localClusterSubnetSynced, c.remoteVtepSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, c.remoteClusterSynced, c.remoteSubnetSynced, c.remoteVtepSynced, c.localClusterSubnetSynced); !ok {
 		return fmt.Errorf("%s failed to wait for caches to sync", ControllerName)
 	}
 
@@ -158,10 +158,10 @@ func (c *Controller) updateRemoteClusterStatus() {
 			}
 		}
 		wg.Add(1)
-		// todo maybe some clever way
 		go c.healCheck(manager, rc, &wg)
 	}
 	wg.Wait()
+	klog.Infof("Update Remote Cluster Status Finished. len=%v", len(c.remoteClusterManagerCache.remoteClusterMap))
 }
 
 // use remove+add instead of update
@@ -171,7 +171,11 @@ func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteClus
 	defer c.remoteClusterManagerCache.mu.Unlock()
 
 	clusterName := rc.Name
-	c.remoteClusterManagerCache.Del(clusterName)
+	if k, exists := c.remoteClusterManagerCache.remoteClusterMap[clusterName]; exists {
+		klog.Infof("Delete cluster %v from cache", clusterName)
+		close(k.StopCh)
+		delete(c.remoteClusterManagerCache.remoteClusterMap, clusterName)
+	}
 
 	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, c.ramaClient, rc, c.remoteSubnetLister, c.localClusterSubnetLister, c.remoteVtepLister)
 
