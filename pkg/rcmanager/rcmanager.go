@@ -92,7 +92,7 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	if err := ipInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
 		ByNodeNameIndexer: indexByNodeName,
 	}); err != nil {
-		klog.Error("index by node name failed. err=%v. ", err)
+		klog.Errorf("index by node name failed. err=%v. ", err)
 		return nil, errors.New("Can't add indexer")
 	}
 
