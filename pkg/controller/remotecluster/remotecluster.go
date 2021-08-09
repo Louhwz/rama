@@ -9,6 +9,20 @@ import (
 	"k8s.io/klog"
 )
 
+// remote cluster is managed by admin, no need to full synchronize
+func (c *Controller) reconcileRemoteCluster(clusterName string) error {
+	klog.Infof("Reconciling Remote Cluster %v", clusterName)
+	remoteCluster, err := c.remoteClusterLister.Get(clusterName)
+	if err != nil {
+		if k8serror.IsNotFound(err) {
+			c.delRemoteCluster(clusterName)
+			return nil
+		}
+		return err
+	}
+	return c.addOrUpdateRemoteClusterManager(remoteCluster)
+}
+
 func (c *Controller) filterRemoteCluster(obj interface{}) bool {
 	_, ok := obj.(*networkingv1.RemoteCluster)
 	return ok
@@ -35,20 +49,6 @@ func (c *Controller) updateRemoteCluster(oldObj, newObj interface{}) {
 
 func (c *Controller) enqueueRemoteCluster(clusterName string) {
 	c.remoteClusterQueue.Add(clusterName)
-}
-
-// remote cluster is managed by admin, no need to full synchronize
-func (c *Controller) reconcileRemoteCluster(clusterName string) error {
-	klog.Infof("Reconciling Remote Cluster %v", clusterName)
-	remoteCluster, err := c.remoteClusterLister.Get(clusterName)
-	if err != nil {
-		if k8serror.IsNotFound(err) {
-			c.delRemoteCluster(clusterName)
-			return nil
-		}
-		return err
-	}
-	return c.addOrUpdateRemoteClusterManager(remoteCluster)
 }
 
 func (c *Controller) delRemoteCluster(clusterName string) {
@@ -84,7 +84,7 @@ func (c *Controller) processNextRemoteCluster() bool {
 			return fmt.Errorf("[remote cluster] fail to sync '%v': %v, requeuing", key, err)
 		}
 		c.remoteClusterQueue.Forget(obj)
-		klog.Infof("[remote cluster] succeed to sync '%v'", key)
+		klog.Infof("succeed to sync '%v'", key)
 		return nil
 	}(obj)
 

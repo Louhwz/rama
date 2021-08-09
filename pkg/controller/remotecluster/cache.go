@@ -12,12 +12,6 @@ type Cache struct {
 	remoteClusterMap map[string]*rcmanager.Manager
 }
 
-type ManagerWrapper struct {
-	stopCh chan struct{}
-
-	rcmanager.Manager
-}
-
 func (c *Cache) Get(clusterName string) (manager *rcmanager.Manager, exists bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

@@ -21,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	coreinformers "k8s.io/client-go/informers"
 	kubeclientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -42,7 +41,6 @@ const (
 type Controller struct {
 	kubeClient          kubeclientset.Interface
 	ramaClient          versioned.Interface
-	kubeInformerFactory coreinformers.SharedInformerFactory
 	RamaInformerFactory externalversions.SharedInformerFactory
 
 	remoteClusterLister      listers.RemoteClusterLister
@@ -121,9 +119,10 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	// start workers
 	klog.Info("Starting workers")
 	go wait.Until(c.runRemoteClusterWorker, time.Second, stopCh)
+	go wait.Until(c.processRCManagerQueue, time.Second, stopCh)
+	// wait until remote cluster mgr finish initializing
+	time.Sleep(5 * time.Second)
 	go wait.Until(c.updateRemoteClusterStatus, HealthCheckPeriod, stopCh)
-	go c.processRCManagerQueue(stopCh)
-
 	<-stopCh
 
 	c.closeRemoteClusterManager()
@@ -177,10 +176,12 @@ func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteClus
 		delete(c.remoteClusterManagerCache.remoteClusterMap, clusterName)
 	}
 
-	rcManager, err := rcmanager.NewRemoteClusterManager(c.kubeClient, c.ramaClient, rc, c.remoteSubnetLister, c.localClusterSubnetLister, c.remoteVtepLister)
+	rcManager, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.ramaClient, c.remoteSubnetLister,
+		c.localClusterSubnetLister, c.remoteVtepLister)
 
 	if err != nil || rcManager.RamaClient == nil || rcManager.KubeClient == nil {
-		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig", fmt.Sprintf("Can't connect to remote cluster %v", clusterName))
+		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig",
+			fmt.Sprintf("Can't connect to remote cluster %v", clusterName))
 		return errors.Errorf("Can't connect to remote cluster %v", clusterName)
 	}
 
@@ -241,49 +242,4 @@ func (c *Controller) healCheck(manager *rcmanager.Manager, rc *networkingv1.Remo
 	if err != nil {
 		klog.Warningf("[health check] can't update remote cluster. err=%v", err)
 	}
-	return
-}
-
-func (c *Controller) processRCManagerQueue(stopCh <-chan struct{}) {
-	for c.startRemoteClusterManager(stopCh) {
-	}
-}
-
-func (c *Controller) startRemoteClusterManager(stopCh <-chan struct{}) bool {
-	defer func() {
-		if err := recover(); err != nil {
-			klog.Errorf("startRemoteClusterManager panic. err=%v", err)
-		}
-	}()
-
-	obj, shutdown := c.rcManagerQueue.Get()
-	if shutdown {
-		return false
-	}
-	clusterName, ok := obj.(string)
-	if !ok {
-		klog.Errorf("Can't convert obj in rc manager queue. obj=%v", obj)
-		return true
-	}
-
-	rcManager, exists := c.remoteClusterManagerCache.Get(clusterName)
-	if !exists {
-		klog.Errorf("Can't find rcManager. clusterName=%v", clusterName)
-		return true
-	}
-	klog.Infof("Start single remote cluster manager. clusterName=%v", clusterName)
-
-	managerCh := rcManager.StopCh
-	go func() {
-		if ok := cache.WaitForCacheSync(stopCh, rcManager.NodeSynced, rcManager.SubnetSynced, rcManager.IPSynced); !ok {
-			klog.Errorf("failed to wait for remote cluster caches to sync. clusterName=%v", clusterName)
-			return
-		}
-		go wait.Until(rcManager.RunNodeWorker, 1*time.Second, managerCh)
-		go wait.Until(rcManager.RunSubnetWorker, 1*time.Second, managerCh)
-		go wait.Until(rcManager.RunIPInstanceWorker, 1*time.Second, managerCh)
-	}()
-	go rcManager.KubeInformerFactory.Start(managerCh)
-	go rcManager.RamaInformerFactory.Start(managerCh)
-	return true
 }

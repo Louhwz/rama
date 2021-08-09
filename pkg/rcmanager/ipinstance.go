@@ -30,8 +30,6 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 			err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Delete(context.TODO(), vtepName, metav1.DeleteOptions{})
 			if k8serror.IsNotFound(err) {
 				return nil
-			} else {
-				return err
 			}
 		}
 		return err
@@ -102,6 +100,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 				return err
 			}
 		}
+		remoteVtep.Status.LastModifyTime = curTime
 		_, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 		return err
 	})
@@ -164,6 +163,7 @@ func (m *Manager) processNextIPInstance() bool {
 			// TODO: use retry handler to
 			// Put the item back on the workqueue to handle any transient errors
 			m.IPQueue.AddRateLimited(key)
+			klog.Warningf("[ipinstance] failed to reconcileIPInstance. key=%v. err=%v", key, err)
 			return fmt.Errorf("[ipinstance] fail to sync '%s' for cluster id=%v: %v, requeuing", key, m.ClusterName, err)
 		}
 		m.IPQueue.Forget(obj)
@@ -206,7 +206,6 @@ func (m *Manager) updateIPInstance(oldObj, newObj interface{}) {
 	if newInstance.Spec.Address.IP != oldInstance.Spec.Address.IP {
 		m.enqueueIPInstance(newInstance.Status.NodeName)
 	}
-	return
 }
 
 func (m *Manager) enqueueIPInstance(nodeName string) {

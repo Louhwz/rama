@@ -66,7 +66,10 @@ func (m *Manager) reconcileSubnet(key string) error {
 	}
 
 	add, update, remove := m.diffSubnetAndRCSubnet(remoteClusterSubnets, localClusterRemoteSubnets, networkMap)
-	var wg sync.WaitGroup
+	var (
+		wg  sync.WaitGroup
+		cur = metav1.Now()
+	)
 	wg.Add(3)
 	go func() {
 		defer wg.Done()
@@ -81,7 +84,7 @@ func (m *Manager) reconcileSubnet(key string) error {
 				klog.Warningf("Can't create remote subnet in local cluster. err=%v. remote subnet name=%v", err, rcSubnet.Name)
 				continue
 			}
-			// todo can the status make sense?
+			newSubnet.Status.LastModifyTime = cur
 			_, err = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), newSubnet, metav1.UpdateOptions{})
 			if err != nil {
 				klog.Warningf("Can't UpdateStatus remote subnet in local cluster. err=%v. remote subnet name=%v", err, rcSubnet.Name)
@@ -95,15 +98,16 @@ func (m *Manager) reconcileSubnet(key string) error {
 			var newRemoteSubnet *networkingv1.RemoteSubnet
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				newRemoteSubnet, err = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().Update(context.TODO(), v, metav1.UpdateOptions{})
+				if err != nil {
+					return err
+				}
+				newRemoteSubnet.Status.LastModifyTime = cur
+				_, err = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), newRemoteSubnet, metav1.UpdateOptions{})
 				return err
 			})
 			if err != nil {
 				klog.Warningf("Can't update remote subnet in local cluster. err=%v. name=%v", err, v.Name)
 				continue
-			}
-			_, err = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().UpdateStatus(context.TODO(), newRemoteSubnet, metav1.UpdateOptions{})
-			if err != nil {
-				klog.Warningf("Can't UpdateStatus remote subnet in local cluster. err=%v. remote subnet name=%v", err, v.Name)
 			}
 		}
 	}()
@@ -231,13 +235,6 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet, networ
 		},
 	}
 	return rs, nil
-}
-
-func (m *Manager) updateRemoteSubnet(rcSubnet *networkingv1.RemoteSubnet) error {
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		_, err := m.localClusterRamaClient.NetworkingV1().RemoteSubnets().Update(context.TODO(), rcSubnet, metav1.UpdateOptions{})
-		return err
-	})
 }
 
 func (m *Manager) filterSubnet(obj interface{}) bool {

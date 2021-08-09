@@ -35,11 +35,8 @@ type Manager struct {
 	localClusterKubeClient   kubeclientset.Interface
 	localClusterRamaClient   versioned.Interface
 	remoteSubnetLister       listers.RemoteSubnetLister
-	remoteSubnetSynced       cache.InformerSynced
 	remoteVtepLister         listers.RemoteVtepLister
-	remoteVtepSynced         cache.InformerSynced
 	localClusterSubnetLister listers.SubnetLister
-	localClusterSubnetSynced cache.InformerSynced
 
 	KubeClient              *kubeclientset.Clientset
 	RamaClient              *versioned.Clientset
@@ -61,10 +58,9 @@ type Manager struct {
 	remoteClusterNodeSynced cache.InformerSynced
 }
 
-func NewRemoteClusterManager(
+func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	localClusterKubeClient kubeclientset.Interface,
 	localClusterRamaClient versioned.Interface,
-	rc *networkingv1.RemoteCluster,
 	remoteSubnetLister listers.RemoteSubnetLister,
 	localClusterSubnetLister listers.SubnetLister,
 	remoteVtepLister listers.RemoteVtepLister) (*Manager, error) {
@@ -72,7 +68,7 @@ func NewRemoteClusterManager(
 		if err := recover(); err != nil {
 			s, _ := jsoniter.MarshalToString(rc)
 			klog.Errorf("Panic hanppened. Can't new remote cluster manager. Maybe wrong kube config. "+
-				"err=%v. remote cluster=%v\n", err, s, debug.Stack())
+				"err=%v. remote cluster=%v\n%v", err, s, debug.Stack())
 		}
 	}()
 	klog.Infof("NewRemoteClusterManager %v", rc.Name)

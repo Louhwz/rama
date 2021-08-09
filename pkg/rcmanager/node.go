@@ -31,15 +31,21 @@ func (m *Manager) reconcileNode(key string) error {
 	}
 
 	add, update, remove := m.diffNodeAndVtep(nodes, vteps)
-	var wg sync.WaitGroup
+	var (
+		wg  sync.WaitGroup
+		cur = metav1.Now()
+	)
 	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		for _, v := range add {
-			_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), v, metav1.CreateOptions{})
+			vtep, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), v, metav1.CreateOptions{})
 			if err != nil {
 				klog.Warningf("Can't create remote vtep in local cluster. err=%v. remote vtep name=%v", err, v.Name)
+				continue
 			}
+			vtep.Status.LastModifyTime = cur
+			_, _ = m.localClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
 		}
 	}()
 
@@ -47,7 +53,12 @@ func (m *Manager) reconcileNode(key string) error {
 		defer wg.Done()
 		for _, v := range update {
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), v, metav1.UpdateOptions{})
+				vtep, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), v, metav1.UpdateOptions{})
+				if err != nil {
+					return err
+				}
+				vtep.Status.LastModifyTime = cur
+				_, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), vtep, metav1.UpdateOptions{})
 				return err
 			})
 			if err != nil {
