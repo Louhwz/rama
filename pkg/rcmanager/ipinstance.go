@@ -67,7 +67,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		}
 		return ipList
 	}()
-	actual := remoteVtep.Spec.IPList
+	actual := remoteVtep.Spec.EndpointIPList
 	desiredSet := gset.NewFrom(desired)
 	actualSet := gset.NewFrom(actual)
 
@@ -81,7 +81,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	if !newVtep && !ipListChanged && !vtepChanged {
 		return nil
 	}
-	remoteVtep.Spec.IPList = func() []string {
+	remoteVtep.Spec.EndpointIPList = func() []string {
 		ans := make([]string, 0, actualSet.Size())
 		for _, v := range actualSet.Slice() {
 			ans = append(ans, fmt.Sprint(v))

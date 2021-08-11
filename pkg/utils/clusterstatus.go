@@ -64,6 +64,18 @@ func NewClusterNotOffline() networkingv1.ClusterCondition {
 	}
 }
 
+//func NewClusterClosed() networkingv1.ClusterCondition {
+//	cur := metav1.Now()
+//	return networkingv1.ClusterCondition{
+//		Type:               networkingv1.,
+//		Status:             "",
+//		LastProbeTime:      metav1.Time{},
+//		LastTransitionTime: nil,
+//		Reason:             nil,
+//		Message:            nil,
+//	}
+//}
+
 func StringPtr(s string) *string {
 	return &s
 }

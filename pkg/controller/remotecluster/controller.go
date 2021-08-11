@@ -151,7 +151,7 @@ func (c *Controller) updateRemoteClusterStatus() {
 	for _, rc := range remoteClusters {
 		manager, exists := c.remoteClusterManagerCache.Get(rc.Name)
 		if !exists {
-			// error happened this time, add next time
+			// if error happens this time, add next time
 			if err = c.addOrUpdateRemoteClusterManager(rc); err != nil {
 				continue
 			}
@@ -176,16 +176,30 @@ func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteClus
 		delete(c.remoteClusterManagerCache.remoteClusterMap, clusterName)
 	}
 
-	rcManager, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.ramaClient, c.remoteSubnetLister,
+	rcMgr, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.ramaClient, c.remoteSubnetLister,
 		c.localClusterSubnetLister, c.remoteVtepLister)
 
-	if err != nil || rcManager.RamaClient == nil || rcManager.KubeClient == nil {
+	if err != nil || rcMgr.RamaClient == nil || rcMgr.KubeClient == nil {
 		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig",
 			fmt.Sprintf("Can't connect to remote cluster %v", clusterName))
 		return errors.Errorf("Can't connect to remote cluster %v", clusterName)
 	}
 
-	c.remoteClusterManagerCache.remoteClusterMap[clusterName] = rcManager
+	//rcs, err :=  rcMgr.RamaClient.NetworkingV1().RemoteClusters().List(context.TODO(), metav1.ListOptions{})
+	//if err != nil {
+	//	return  err
+	//}
+	//var myselfUUID
+	//for _, v := range rcs.Items {
+	//	if v.Status.UUID == "" {
+	//		continue
+	//	}
+	//	if v.Status.UUID == myselfUUID {
+	//		klog.Warningf()
+	//	}
+	//}
+
+	c.remoteClusterManagerCache.remoteClusterMap[clusterName] = rcMgr
 	c.rcManagerQueue.Add(clusterName)
 	return nil
 }

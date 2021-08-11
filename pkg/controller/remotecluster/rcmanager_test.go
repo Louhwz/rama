@@ -407,6 +407,9 @@ func TestNilClientInterface(t *testing.T) {
 	ramaClient := versioned.NewForConfigOrDie(restclient.AddUserAgent(config, "Rama"))
 
 	_, err = ramaClient.NetworkingV1().RemoteSubnets().Get(context.TODO(), "subnet", metav1.GetOptions{})
+	if k8serror.IsNotFound(err) {
+		t.Log("hello world")
+	}
 	assert.Nil(t, err)
 	//t.Log(string(body))
 }

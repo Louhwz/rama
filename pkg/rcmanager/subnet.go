@@ -254,9 +254,6 @@ func (m *Manager) updateSubnet(oldObj, newObj interface{}) {
 	if oldRC.ResourceVersion == newRC.ResourceVersion {
 		return
 	}
-	if oldRC.Generation == newRC.Generation {
-		return
-	}
 	m.enqueueSubnet(newRC.ObjectMeta.Name)
 }
 
