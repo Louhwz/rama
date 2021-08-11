@@ -134,7 +134,7 @@ func (m *Manager) RunSubnetWorker() {
 func (m *Manager) validateLocalClusterOverlap(subnet *networkingv1.Subnet, subnets []*networkingv1.Subnet) error {
 	for _, s := range subnets {
 		if utils.Intersect(subnet.Spec.Range.CIDR, subnet.Spec.Range.Version, s.Spec.Range.CIDR, s.Spec.Range.Version) {
-			klog.Warningf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from lcoal cluster, cidr=%v",
+			klog.Errorf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from lcoal cluster, cidr=%v",
 				m.ClusterName, subnet.Spec.Range.CIDR, s.Spec.Range.CIDR)
 			return errors.Newf("Overlap network. overlap with other local cluster subnet")
 		}
@@ -150,7 +150,7 @@ func (m *Manager) validateRemoteClusterOverlap(subnet *networkingv1.Subnet, rcSu
 			continue
 		}
 		if utils.Intersect(rc.Spec.Range.CIDR, rc.Spec.Range.Version, subnet.Spec.Range.CIDR, subnet.Spec.Range.Version) {
-			klog.Warningf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from cluster %v, cidr=%v",
+			klog.Errorf("Two subnet intersect. One is from cluster %v, cidr=%v. Another is from cluster %v, cidr=%v",
 				m.ClusterName, subnet.Spec.Range.CIDR, rc.Spec.ClusterName, rc.Spec.Range.CIDR)
 			return errors.Newf("Overlap network. overlap with other remoteSubnet")
 		}
@@ -238,6 +238,9 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet, networ
 }
 
 func (m *Manager) filterSubnet(obj interface{}) bool {
+	if !m.GetMeetCondition() {
+		return false
+	}
 	_, ok := obj.(*networkingv1.Subnet)
 	return ok
 }

@@ -2,6 +2,7 @@ package remotecluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"testing"
@@ -412,4 +413,9 @@ func TestNilClientInterface(t *testing.T) {
 	}
 	assert.Nil(t, err)
 	//t.Log(string(body))
+}
+
+func TestHandleError(t *testing.T ){
+	err := errors.New("err happened")
+	runtimeutil.HandleError(err)
 }

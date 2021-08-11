@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
@@ -53,10 +53,10 @@ func SelectorClusterName(clusterName string) labels.Selector {
 	return labels.SelectorFromSet(s)
 }
 
-func GetUUID(client corev1.CoreV1Interface) (types.UID, error) {
-	ns, err := client.Namespaces().Get(context.TODO(), "kube-system", metav1.GetOptions{})
+func GetUUID(client kubernetes.Interface) (types.UID, error) {
+	ns, err := client.CoreV1().Namespaces().Get(context.TODO(), "kube-system", metav1.GetOptions{})
 	if err != nil {
-		klog.Warningf("Can't get uuid. err=%v", err)
+		klog.Errorf("Can't get uuid. err=%v", err)
 		return "", err
 	}
 	return ns.UID, nil

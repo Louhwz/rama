@@ -167,6 +167,9 @@ func (m *Manager) RunNodeWorker() {
 }
 
 func (m *Manager) filterNode(obj interface{}) bool {
+	if !m.GetMeetCondition() {
+		return false
+	}
 	_, ok := obj.(*apiv1.Node)
 	return ok
 }

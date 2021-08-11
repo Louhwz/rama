@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"time"
 
@@ -15,10 +14,10 @@ import (
 	listers "github.com/oecp/rama/pkg/client/listers/networking/v1"
 	"github.com/oecp/rama/pkg/rcmanager"
 	"github.com/oecp/rama/pkg/utils"
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	kubeclientset "k8s.io/client-go/kubernetes"
@@ -39,23 +38,28 @@ const (
 )
 
 type Controller struct {
-	kubeClient          kubeclientset.Interface
-	ramaClient          versioned.Interface
-	RamaInformerFactory externalversions.SharedInformerFactory
+	// localCluster's UUID
+	UUID                      types.UID
+	OverlayNetID              *uint32
+	overlayNetIDMU            sync.RWMutex
+	rcMgrCache                Cache
+	kubeClient                kubeclientset.Interface
+	ramaClient                versioned.Interface
+	RamaInformerFactory       externalversions.SharedInformerFactory
+	remoteClusterLister       listers.RemoteClusterLister
+	remoteClusterSynced       cache.InformerSynced
+	remoteClusterQueue        workqueue.RateLimitingInterface
+	remoteSubnetLister        listers.RemoteSubnetLister
+	remoteSubnetSynced        cache.InformerSynced
+	remoteVtepLister          listers.RemoteVtepLister
+	remoteVtepSynced          cache.InformerSynced
+	localClusterSubnetLister  listers.SubnetLister
+	localClusterSubnetSynced  cache.InformerSynced
+	localClusterNetworkLister listers.NetworkLister
+	localClusterNetworkSynced cache.InformerSynced
 
-	remoteClusterLister      listers.RemoteClusterLister
-	remoteClusterSynced      cache.InformerSynced
-	remoteClusterQueue       workqueue.RateLimitingInterface
-	remoteSubnetLister       listers.RemoteSubnetLister
-	remoteSubnetSynced       cache.InformerSynced
-	remoteVtepLister         listers.RemoteVtepLister
-	remoteVtepSynced         cache.InformerSynced
-	localClusterSubnetLister listers.SubnetLister
-	localClusterSubnetSynced cache.InformerSynced
-
-	remoteClusterManagerCache Cache
-	recorder                  record.EventRecorder
-	rcManagerQueue            workqueue.RateLimitingInterface
+	recorder   record.EventRecorder
+	rcMgrQueue workqueue.RateLimitingInterface
 }
 
 func NewController(
@@ -73,10 +77,16 @@ func NewController(
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: ControllerName})
 
+	uuid, err := utils.GetUUID(kubeClient)
+	if err != nil {
+		panic(err)
+	}
+
 	c := &Controller{
-		remoteClusterManagerCache: Cache{
-			remoteClusterMap: make(map[string]*rcmanager.Manager),
+		rcMgrCache: Cache{
+			rcMgrMap: make(map[string]*rcmanager.Manager),
 		},
+		UUID:                     uuid,
 		kubeClient:               kubeClient,
 		ramaClient:               ramaClient,
 		remoteClusterLister:      remoteClusterInformer.Lister(),
@@ -88,7 +98,7 @@ func NewController(
 		remoteVtepLister:         remoteVtepInformer.Lister(),
 		remoteVtepSynced:         remoteSubnetInformer.Informer().HasSynced,
 		remoteClusterQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
-		rcManagerQueue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "remoteclustermanager"),
+		rcMgrQueue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "remoteclustermanager"),
 		recorder:                 recorder,
 	}
 
@@ -106,7 +116,7 @@ func NewController(
 
 func (c *Controller) Run(stopCh <-chan struct{}) error {
 	defer runtimeutil.HandleCrash()
-	defer c.rcManagerQueue.ShutDown()
+	defer c.rcMgrQueue.ShutDown()
 	defer c.remoteClusterQueue.ShutDown()
 
 	klog.Infof("Starting %s controller", ControllerName)
@@ -120,8 +130,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	klog.Info("Starting workers")
 	go wait.Until(c.runRemoteClusterWorker, time.Second, stopCh)
 	go wait.Until(c.processRCManagerQueue, time.Second, stopCh)
-	// wait until remote cluster mgr finish initializing
-	time.Sleep(5 * time.Second)
+	go wait.Until(c.runOverlayNetIDWorker, time.Minute, stopCh)
 	go wait.Until(c.updateRemoteClusterStatus, HealthCheckPeriod, stopCh)
 	<-stopCh
 
@@ -133,9 +142,27 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 
 func (c *Controller) closeRemoteClusterManager() {
 	// no need to lock
-	for _, rcManager := range c.remoteClusterManagerCache.remoteClusterMap {
-		close(rcManager.StopCh)
+	for _, wrapper := range c.rcMgrCache.rcMgrMap {
+		close(wrapper.StopCh)
 	}
+}
+
+func (c *Controller) runOverlayNetIDWorker() {
+	c.overlayNetIDMU.Lock()
+	defer c.overlayNetIDMU.Unlock()
+	networks, err := c.localClusterNetworkLister.List(labels.NewSelector())
+	if err != nil {
+		klog.Warningf("Can't list local cluster network. err=%v", err)
+	}
+	for _, network := range networks {
+		if network.Spec.Type == networkingv1.NetworkTypeOverlay {
+			n := network.DeepCopy()
+			c.OverlayNetID = n.Spec.NetID
+			break
+		}
+	}
+	// todo
+	klog.Infof("[debug] netid=%v", c.OverlayNetID)
 }
 
 // health checking and resync cache. remote cluster is managed by admin, it can be
@@ -149,86 +176,36 @@ func (c *Controller) updateRemoteClusterStatus() {
 
 	var wg sync.WaitGroup
 	for _, rc := range remoteClusters {
-		manager, exists := c.remoteClusterManagerCache.Get(rc.Name)
+		r := rc.DeepCopy()
+		wrapper, exists := c.rcMgrCache.Get(r.Name)
 		if !exists {
-			// if error happens this time, add next time
-			if err = c.addOrUpdateRemoteClusterManager(rc); err != nil {
-				continue
-			}
+			_ = c.addOrUpdateRCMgr(r)
+			continue
 		}
 		wg.Add(1)
-		go c.healCheck(manager, rc, &wg)
+		go c.updateSingleRCStatus(wrapper, r, &wg)
 	}
 	wg.Wait()
-	klog.Infof("Update Remote Cluster Status Finished. len=%v", len(c.remoteClusterManagerCache.remoteClusterMap))
+	klog.Infof("Update Remote Cluster Status Finished. len=%v", len(c.rcMgrCache.rcMgrMap))
 }
 
-// use remove+add instead of update
-func (c *Controller) addOrUpdateRemoteClusterManager(rc *networkingv1.RemoteCluster) error {
-	// lock in function range to avoid renewing cluster manager when newing one
-	c.remoteClusterManagerCache.mu.Lock()
-	defer c.remoteClusterManagerCache.mu.Unlock()
-
-	clusterName := rc.Name
-	if k, exists := c.remoteClusterManagerCache.remoteClusterMap[clusterName]; exists {
-		klog.Infof("Delete cluster %v from cache", clusterName)
-		close(k.StopCh)
-		delete(c.remoteClusterManagerCache.remoteClusterMap, clusterName)
-	}
-
-	rcMgr, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.ramaClient, c.remoteSubnetLister,
-		c.localClusterSubnetLister, c.remoteVtepLister)
-
-	if err != nil || rcMgr.RamaClient == nil || rcMgr.KubeClient == nil {
-		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig",
-			fmt.Sprintf("Can't connect to remote cluster %v", clusterName))
-		return errors.Errorf("Can't connect to remote cluster %v", clusterName)
-	}
-
-	//rcs, err :=  rcMgr.RamaClient.NetworkingV1().RemoteClusters().List(context.TODO(), metav1.ListOptions{})
-	//if err != nil {
-	//	return  err
-	//}
-	//var myselfUUID
-	//for _, v := range rcs.Items {
-	//	if v.Status.UUID == "" {
-	//		continue
-	//	}
-	//	if v.Status.UUID == myselfUUID {
-	//		klog.Warningf()
-	//	}
-	//}
-
-	c.remoteClusterManagerCache.remoteClusterMap[clusterName] = rcMgr
-	c.rcManagerQueue.Add(clusterName)
-	return nil
-}
-
-func (c *Controller) healCheck(manager *rcmanager.Manager, rc *networkingv1.RemoteCluster, wg *sync.WaitGroup) {
+func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networkingv1.RemoteCluster, wg *sync.WaitGroup) {
 	rc = rc.DeepCopy()
 	// todo metrics
 	defer func() {
 		if err := recover(); err != nil {
-			klog.Errorf("healCheck panic. err=%v\n%v", err, string(debug.Stack()))
+			klog.Errorf("updateSingleRCStatus panic. err=%v\n%v", err, string(debug.Stack()))
 		}
 	}()
 	defer wg.Done()
+	manager.MeetConditionLock.Lock()
+	defer manager.MeetConditionLock.Unlock()
 
-	conditions := make([]networkingv1.ClusterCondition, 0)
+	conditions := CheckCondition(c, manager.RamaClient, manager.ClusterName, InitializeChecker)
+	nowCondition := MeetCondition(conditions)
+	manager.MeetCondition = nowCondition
 
-	body, err := manager.KubeClient.DiscoveryClient.RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
-	if err != nil {
-		runtimeutil.HandleError(errors.Wrapf(err, "Cluster Health Check failed for cluster %v", manager.ClusterName))
-		conditions = append(conditions, utils.NewClusterOffline(err))
-	} else {
-		if !strings.EqualFold(string(body), "ok") {
-			conditions = append(conditions, utils.NewClusterNotReady(err), utils.NewClusterNotOffline())
-		} else {
-			conditions = append(conditions, utils.NewClusterReady())
-		}
-	}
-
-	updateCondition := func() {
+	updateLastTransitionTime := func() {
 		conditionChanged := false
 		if len(conditions) != len(rc.Status.Conditions) {
 			conditionChanged = true
@@ -250,10 +227,10 @@ func (c *Controller) healCheck(manager *rcmanager.Manager, rc *networkingv1.Remo
 		}
 		rc.Status.Conditions = conditions
 	}
-	updateCondition()
+	updateLastTransitionTime()
 
-	_, err = c.ramaClient.NetworkingV1().RemoteClusters().UpdateStatus(context.TODO(), rc, metav1.UpdateOptions{})
+	_, err := c.ramaClient.NetworkingV1().RemoteClusters().UpdateStatus(context.TODO(), rc, metav1.UpdateOptions{})
 	if err != nil {
-		klog.Warningf("[health check] can't update remote cluster. err=%v", err)
+		klog.Warningf("[updateSingleRCStatus] can't update remote cluster. err=%v", err)
 	}
 }

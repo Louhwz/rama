@@ -10,13 +10,13 @@ import (
 	ramav1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/utils"
 	"k8s.io/apimachinery/pkg/labels"
-	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
 	r                = regexp.MustCompile(`^(https?://)[\w-]+(\.[\w-]+)+:\d{1,5}$`)
-	mu               sync.Mutex
+	validateLock     sync.Mutex
 	remoteClusterGVK = gvkConverter(ramav1.SchemeGroupVersion.WithKind("RemoteCluster"))
 )
 
@@ -32,7 +32,7 @@ func RCCreateValidation(ctx context.Context, req *admission.Request, handler *Ha
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-	return validate(ctx, rc)
+	return validate(rc)
 }
 
 func RCUpdateValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
@@ -43,16 +43,16 @@ func RCUpdateValidation(ctx context.Context, req *admission.Request, handler *Ha
 	if err = handler.Decoder.DecodeRaw(req.Object, newRC); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-	return validate(ctx, newRC)
+	return validate(newRC)
 }
 
 func RCDeleteValidation(ctx context.Context, req *admission.Request, handler *Handler) admission.Response {
 	return admission.Allowed("validation pass")
 }
 
-func validate(ctx context.Context, rc *ramav1.RemoteCluster) admission.Response {
-	mu.Lock()
-	defer mu.Unlock()
+func validate(rc *ramav1.RemoteCluster) admission.Response {
+	validateLock.Lock()
+	defer validateLock.Unlock()
 
 	connConfig := rc.Spec.ConnConfig
 	if connConfig.Endpoint == "" || connConfig.CABundle == nil || connConfig.ClientKey == nil || connConfig.ClientCert == nil {
@@ -66,8 +66,8 @@ func validate(ctx context.Context, rc *ramav1.RemoteCluster) admission.Response 
 	if err != nil {
 		return admission.Denied(fmt.Sprintf("Can't build connection to remote cluster, maybe wrong config. Err=%v", err.Error()))
 	}
-	coreClient := v1.NewForConfigOrDie(cfg)
-	uuid, err := utils.GetUUID(coreClient)
+	client := kubernetes.NewForConfigOrDie(cfg)
+	uuid, err := utils.GetUUID(client)
 	if err != nil {
 		return admission.Denied(fmt.Sprintf("Can't get uuid. Err=%v", err))
 	}
