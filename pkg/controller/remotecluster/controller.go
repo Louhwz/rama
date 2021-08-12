@@ -68,7 +68,8 @@ func NewController(
 	remoteClusterInformer informers.RemoteClusterInformer,
 	remoteSubnetInformer informers.RemoteSubnetInformer,
 	localClusterSubnetInformer informers.SubnetInformer,
-	remoteVtepInformer informers.RemoteVtepInformer) *Controller {
+	remoteVtepInformer informers.RemoteVtepInformer,
+	localClusterNetworkInformer informers.NetworkInformer) *Controller {
 	runtimeutil.Must(networkingv1.AddToScheme(scheme.Scheme))
 
 	klog.V(4).Info("Creating event broadcaster")
@@ -86,20 +87,22 @@ func NewController(
 		rcMgrCache: Cache{
 			rcMgrMap: make(map[string]*rcmanager.Manager),
 		},
-		UUID:                     uuid,
-		kubeClient:               kubeClient,
-		ramaClient:               ramaClient,
-		remoteClusterLister:      remoteClusterInformer.Lister(),
-		remoteClusterSynced:      remoteClusterInformer.Informer().HasSynced,
-		remoteSubnetLister:       remoteSubnetInformer.Lister(),
-		remoteSubnetSynced:       remoteSubnetInformer.Informer().HasSynced,
-		localClusterSubnetLister: localClusterSubnetInformer.Lister(),
-		localClusterSubnetSynced: localClusterSubnetInformer.Informer().HasSynced,
-		remoteVtepLister:         remoteVtepInformer.Lister(),
-		remoteVtepSynced:         remoteSubnetInformer.Informer().HasSynced,
-		remoteClusterQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
-		rcMgrQueue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "remoteclustermanager"),
-		recorder:                 recorder,
+		UUID:                      uuid,
+		kubeClient:                kubeClient,
+		ramaClient:                ramaClient,
+		remoteClusterLister:       remoteClusterInformer.Lister(),
+		remoteClusterSynced:       remoteClusterInformer.Informer().HasSynced,
+		remoteSubnetLister:        remoteSubnetInformer.Lister(),
+		remoteSubnetSynced:        remoteSubnetInformer.Informer().HasSynced,
+		localClusterSubnetLister:  localClusterSubnetInformer.Lister(),
+		localClusterSubnetSynced:  localClusterSubnetInformer.Informer().HasSynced,
+		remoteVtepLister:          remoteVtepInformer.Lister(),
+		remoteVtepSynced:          remoteSubnetInformer.Informer().HasSynced,
+		localClusterNetworkLister: localClusterNetworkInformer.Lister(),
+		localClusterNetworkSynced: localClusterNetworkInformer.Informer().HasSynced,
+		remoteClusterQueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ControllerName),
+		rcMgrQueue:                workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "remoteclustermanager"),
+		recorder:                  recorder,
 	}
 
 	remoteClusterInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
@@ -150,6 +153,7 @@ func (c *Controller) closeRemoteClusterManager() {
 func (c *Controller) runOverlayNetIDWorker() {
 	c.overlayNetIDMU.Lock()
 	defer c.overlayNetIDMU.Unlock()
+
 	networks, err := c.localClusterNetworkLister.List(labels.NewSelector())
 	if err != nil {
 		klog.Warningf("Can't list local cluster network. err=%v", err)
