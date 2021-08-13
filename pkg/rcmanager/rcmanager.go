@@ -60,7 +60,11 @@ type Manager struct {
 
 type Meta struct {
 	ClusterName string
-	UUID        types.UID
+	// RemoteClusterUID is used to set owner reference
+	RemoteClusterUID types.UID
+	// ClusterUUID represents the corresponding remote cluster's uuid, which is generated
+	// from unique k8s resource
+	ClusterUUID types.UID
 	StopCh      chan struct{}
 	// Only if meet the condition, can create remote cluster's cr
 	// Conditions are:
@@ -130,10 +134,11 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 
 	rcMgr := &Manager{
 		Meta: Meta{
-			ClusterName:   rc.Name,
-			UUID:          uuid,
-			StopCh:        stopCh,
-			MeetCondition: false,
+			ClusterName:      rc.Name,
+			RemoteClusterUID: rc.UID,
+			ClusterUUID:      uuid,
+			StopCh:           stopCh,
+			MeetCondition:    false,
 		},
 		localClusterKubeClient:   localClusterKubeClient,
 		localClusterRamaClient:   localClusterRamaClient,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/oecp/rama/pkg/feature"
 	"runtime"
 	"testing"
 	"time"
@@ -420,15 +421,27 @@ func TestHandleError(t *testing.T) {
 	runtimeutil.HandleError(err)
 }
 
+func MarshalToString(i interface{}) string {
+	s, _ := jsoniter.MarshalToString(i)
+	return s
+}
+
 func TestUUID(t *testing.T) {
 	config, err := clientconfig.GetConfig()
 	assert.Nil(t, err)
-	kubeClient := kubernetes.NewForConfigOrDie(config)
-	//ramaClient := versioned.NewForConfigOrDie(restclient.AddUserAgent(config, "Rama"))
+	//kubeClient := kubernetes.NewForConfigOrDie(config)
+	ramaClient := versioned.NewForConfigOrDie(restclient.AddUserAgent(config, "Rama"))
 
-	ns, err := kubeClient.CoreV1().Namespaces().Get(context.TODO(), "kube-system", metav1.GetOptions{})
-	if k8serror.IsNotFound(err) {
-		t.Log("hello world")
-	}
-	t.Log(ns.UID)
+	rv, err := ramaClient.NetworkingV1().RemoteVteps().List(context.TODO(), metav1.ListOptions{})
+	t.Log(err)
+	t.Log(MarshalToString(rv))
+
+	vtep, err := ramaClient.NetworkingV1().RemoteVteps().Get(context.TODO(), "remotecluster-2.kube-salve1", metav1.GetOptions{})
+	t.Log(err)
+	t.Log(MarshalToString(vtep))
+
+}
+
+func TestEnabled(t *testing.T) {
+	t.Log(feature.MultiClusterEnabled())
 }

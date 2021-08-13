@@ -65,7 +65,7 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 		conditions = append(conditions, utils.NewClusterOffline(connErr))
 	} else {
 		conditions = CheckCondition(c, rcMgr.RamaClient, rc.ClusterName, InitializeChecker)
-		rc.Status.UUID = rcMgr.UUID
+		rc.Status.UUID = rcMgr.ClusterUUID
 	}
 	rc.Status.Conditions = conditions
 

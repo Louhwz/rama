@@ -176,19 +176,23 @@ func (c *Controller) updateRemoteClusterStatus() {
 		return
 	}
 
-	var wg sync.WaitGroup
+	var (
+		wg  sync.WaitGroup
+		cnt = 0
+	)
 	for _, rc := range remoteClusters {
 		r := rc.DeepCopy()
 		manager, exists := c.rcMgrCache.Get(r.Name)
 		if !exists {
-			_ = c.addOrUpdateRCMgr(r)
+			//_ = c.addOrUpdateRCMgr(r)
 			continue
 		}
+		cnt = cnt + 1
 		wg.Add(1)
 		go c.updateSingleRCStatus(manager, r, &wg)
 	}
 	wg.Wait()
-	klog.Infof("Update Remote Cluster Status Finished. len=%v", len(c.rcMgrCache.rcMgrMap))
+	klog.Infof("Update Remote Cluster Status Finished. len=%v", cnt)
 }
 
 func (c *Controller) updateSingleRCStatus(manager *rcmanager.Manager, rc *networkingv1.RemoteCluster, wg *sync.WaitGroup) {

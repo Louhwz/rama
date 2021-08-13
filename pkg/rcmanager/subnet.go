@@ -20,7 +20,7 @@ import (
 )
 
 func (m *Manager) reconcileSubnet(key string) error {
-	klog.Infof("Starting reconcile subnet from cluster %v, subnet name=%v", m.ClusterName, key)
+	klog.Infof("[remote cluster] Starting reconcile subnet from cluster %v, subnet name=%v", m.ClusterName, key)
 	if len(key) == 0 {
 		return nil
 	}
@@ -221,7 +221,7 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet, networ
 					APIVersion: networkingv1.SchemeGroupVersion.String(),
 					Kind:       "RemoteCluster",
 					Name:       m.ClusterName,
-					UID:        m.UUID,
+					UID:        m.RemoteClusterUID,
 					Controller: pointer.BoolPtr(true),
 				},
 			},
