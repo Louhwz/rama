@@ -165,8 +165,6 @@ func (c *Controller) runOverlayNetIDWorker() {
 			break
 		}
 	}
-	// todo
-	klog.Infof("[debug] netid=%v", c.OverlayNetID)
 }
 
 // health checking and resync cache. remote cluster is managed by admin, it can be
@@ -181,13 +179,13 @@ func (c *Controller) updateRemoteClusterStatus() {
 	var wg sync.WaitGroup
 	for _, rc := range remoteClusters {
 		r := rc.DeepCopy()
-		wrapper, exists := c.rcMgrCache.Get(r.Name)
+		manager, exists := c.rcMgrCache.Get(r.Name)
 		if !exists {
 			_ = c.addOrUpdateRCMgr(r)
 			continue
 		}
 		wg.Add(1)
-		go c.updateSingleRCStatus(wrapper, r, &wg)
+		go c.updateSingleRCStatus(manager, r, &wg)
 	}
 	wg.Wait()
 	klog.Infof("Update Remote Cluster Status Finished. len=%v", len(c.rcMgrCache.rcMgrMap))

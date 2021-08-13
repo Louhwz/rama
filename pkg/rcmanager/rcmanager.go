@@ -60,7 +60,7 @@ type Manager struct {
 
 type Meta struct {
 	ClusterName string
-	UID         types.UID
+	UUID        types.UID
 	StopCh      chan struct{}
 	// Only if meet the condition, can create remote cluster's cr
 	// Conditions are:
@@ -76,6 +76,13 @@ func (m *Manager) GetMeetCondition() bool {
 	defer m.MeetConditionLock.RUnlock()
 
 	return m.MeetCondition
+}
+
+func (m *Manager) SetMeetCondition(val bool) {
+	m.MeetConditionLock.Lock()
+	defer m.MeetConditionLock.Unlock()
+
+	m.MeetCondition = val
 }
 
 func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
@@ -111,15 +118,20 @@ func NewRemoteClusterManager(rc *networkingv1.RemoteCluster,
 	if err := ipInformer.Informer().GetIndexer().AddIndexers(cache.Indexers{
 		ByNodeNameIndexer: indexByNodeName,
 	}); err != nil {
-		klog.Errorf("index by node name failed. err=%v. ", err)
-		return nil, errors.New("Can't add indexer")
+		klog.Errorf("[remote-cluster-manager] index by node name failed. err=%v. ", err)
+		return nil, errors.New("[remote-cluster-manager] Can't add indexer")
 	}
+	uuid, err := utils.GetUUID(kubeClient)
+	if err != nil {
+		return nil, err
+	}
+
 	stopCh := make(chan struct{})
 
 	rcMgr := &Manager{
 		Meta: Meta{
 			ClusterName:   rc.Name,
-			UID:           rc.UID,
+			UUID:          uuid,
 			StopCh:        stopCh,
 			MeetCondition: false,
 		},

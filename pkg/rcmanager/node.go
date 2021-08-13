@@ -110,11 +110,11 @@ func (m *Manager) diffNodeAndVtep(nodes []*apiv1.Node, vteps []*networkingv1.Rem
 		vtepMac := node.Annotations[constants.AnnotationNodeVtepMac]
 		if vtep, exists := vtepMap[vtepName]; exists {
 			if vtep.Spec.VtepIP != vtepIP || vtep.Spec.VtepMAC != vtepMac {
-				v := utils.NewRemoteVtep(m.ClusterName, m.UID, vtepIP, vtepMac, node.Name, nodeIPList)
+				v := utils.NewRemoteVtep(m.ClusterName, m.UUID, vtepIP, vtepMac, node.Name, nodeIPList)
 				update = append(update, v)
 			}
 		} else {
-			v := utils.NewRemoteVtep(m.ClusterName, m.UID, vtepIP, vtepMac, node.Name, nodeIPList)
+			v := utils.NewRemoteVtep(m.ClusterName, m.UUID, vtepIP, vtepMac, node.Name, nodeIPList)
 			add = append(add, v)
 		}
 	}

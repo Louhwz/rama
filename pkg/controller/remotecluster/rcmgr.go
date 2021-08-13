@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/runtime"
-
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/rcmanager"
-	corev1 "k8s.io/api/core/v1"
-
+	"github.com/oecp/rama/pkg/utils"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
@@ -47,6 +46,7 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	// lock in function range to avoid renewing cluster manager when newing one
 	c.rcMgrCache.mu.Lock()
 	defer c.rcMgrCache.mu.Unlock()
+	klog.Infof("[addOrUpdateRCMgr] cluster=%v", rc.Name)
 
 	clusterName := rc.Name
 	if k, exists := c.rcMgrCache.rcMgrMap[clusterName]; exists {
@@ -58,22 +58,24 @@ func (c *Controller) addOrUpdateRCMgr(rc *networkingv1.RemoteCluster) error {
 	rcMgr, err := rcmanager.NewRemoteClusterManager(rc, c.kubeClient, c.ramaClient, c.remoteSubnetLister,
 		c.localClusterSubnetLister, c.remoteVtepLister)
 
-	if err != nil || rcMgr.RamaClient == nil || rcMgr.KubeClient == nil {
+	conditions := make([]networkingv1.ClusterCondition, 0)
+	if err != nil || rcMgr == nil || rcMgr.RamaClient == nil || rcMgr.KubeClient == nil {
 		connErr := errors.Errorf("Can't connect to remote cluster %v", clusterName)
 		c.recorder.Eventf(rc, corev1.EventTypeWarning, "ErrClusterConnectionConfig", connErr.Error())
-		return connErr
+		conditions = append(conditions, utils.NewClusterOffline(connErr))
+	} else {
+		conditions = CheckCondition(c, rcMgr.RamaClient, rc.ClusterName, InitializeChecker)
+		rc.Status.UUID = rcMgr.UUID
 	}
-	conditions := CheckCondition(c, rcMgr.RamaClient, rc.ClusterName, InitializeChecker)
 	rc.Status.Conditions = conditions
-	rc.Status.UUID = c.UUID
 
 	_, err = c.ramaClient.NetworkingV1().RemoteClusters().UpdateStatus(context.TODO(), rc, metav1.UpdateOptions{})
 	if err != nil {
 		runtime.HandleError(err)
+		return err
 	}
-	if MeetCondition(conditions) {
-		rcMgr.MeetCondition = true
-	}
+
+	rcMgr.SetMeetCondition(MeetCondition(conditions))
 
 	c.rcMgrCache.rcMgrMap[clusterName] = rcMgr
 	c.rcMgrQueue.Add(clusterName)
@@ -114,7 +116,7 @@ func (c *Controller) processNextRemoteClusterMgr() bool {
 			return fmt.Errorf("[remote cluster mgr] fail to sync '%v': %v, requeuing", key, err)
 		}
 		c.rcMgrQueue.Forget(obj)
-		klog.Infof("succeed to sync '%v'", key)
+		klog.Infof("[remote-cluster-manager] succeed to sync '%v'", key)
 		return nil
 	}(obj)
 

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 
+	jsoniter "github.com/json-iterator/go"
+
 	"github.com/gogf/gf/container/gset"
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
@@ -47,7 +49,7 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 		if !k8serror.IsNotFound(err) {
 			return err
 		}
-		remoteVtep = utils.NewRemoteVtep(m.ClusterName, m.UID, vtepIP, vtepMac, node.Name, nil)
+		remoteVtep = utils.NewRemoteVtep(m.ClusterName, m.UUID, vtepIP, vtepMac, node.Name, nil)
 		newVtep = true
 	}
 	curTime := metav1.Now()
@@ -81,26 +83,28 @@ func (m *Manager) reconcileIPInstance(nodeName string) error {
 	if !newVtep && !ipListChanged && !vtepChanged {
 		return nil
 	}
-	remoteVtep.Spec.EndpointIPList = func() []string {
-		ans := make([]string, 0, actualSet.Size())
-		for _, v := range actualSet.Slice() {
-			ans = append(ans, fmt.Sprint(v))
-		}
-		return ans
-	}()
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		s, _ := jsoniter.MarshalToString(remoteVtep)
+		klog.Info(newVtep, s)
 		if newVtep {
-			_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
+			remoteVtep, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Create(context.TODO(), remoteVtep, metav1.CreateOptions{})
 			if err != nil {
 				return err
 			}
 		} else {
-			_, err := m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
+			remoteVtep, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().Update(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 			if err != nil {
 				return err
 			}
 		}
 		remoteVtep.Status.LastModifyTime = curTime
+		remoteVtep.Spec.EndpointIPList = func() []string {
+			ans := make([]string, 0, actualSet.Size())
+			for _, v := range actualSet.Slice() {
+				ans = append(ans, fmt.Sprint(v))
+			}
+			return ans
+		}()
 		_, err = m.localClusterRamaClient.NetworkingV1().RemoteVteps().UpdateStatus(context.TODO(), remoteVtep, metav1.UpdateOptions{})
 		return err
 	})

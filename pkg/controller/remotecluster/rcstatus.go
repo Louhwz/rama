@@ -24,10 +24,10 @@ var (
 )
 
 func init() {
-	InitializeChecker = append(InitializeChecker, HealChecker, DoubleConnectedChecker, OverlayNetIDChecker)
+	InitializeChecker = append(InitializeChecker, HealChecker, BidirectionalConnChecker, OverlayNetIDChecker)
 
 	AllReady[utils.TypeHealthCheck] = true
-	AllReady[utils.TypeTwoWayConn] = true
+	AllReady[utils.TypeBidirectionalConn] = true
 	AllReady[utils.TypeSameOverlayNetID] = true
 }
 
@@ -77,13 +77,14 @@ func HealChecker(c *Controller, ramaClient *versioned.Clientset, clusterName str
 	return conditions, nil
 }
 
-// DoubleConnectedChecker check if remote cluster has create the remote cluster
-func DoubleConnectedChecker(c *Controller, ramaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
+// BidirectionalConnChecker check if remote cluster has create the remote cluster
+func BidirectionalConnChecker(c *Controller, ramaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
 	conditions := make([]networkingv1.ClusterCondition, 0)
 
 	rcs, err := ramaClient.NetworkingV1().RemoteClusters().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		runtimeutil.HandleError(err)
+		conditions = append(conditions, utils.NewBidirectionalConnNotReady(err.Error()))
 		return conditions, nil
 	}
 	doubleEndedConn := false
@@ -99,9 +100,9 @@ func DoubleConnectedChecker(c *Controller, ramaClient *versioned.Clientset, clus
 	}
 	if !doubleEndedConn {
 		klog.Warningf("The peer cluster has not created remote cluster. ClusterName=%v", clusterName)
-		conditions = append(conditions, utils.NewDoubleConnNotReady())
+		conditions = append(conditions, utils.NewBidirectionalConnNotReady(utils.MsgBidirectionalConnNotOk))
 	} else {
-		conditions = append(conditions, utils.NewDoubleConnReady())
+		conditions = append(conditions, utils.NewBidirectionalConnReady())
 	}
 	return conditions, nil
 }
@@ -117,6 +118,7 @@ func OverlayNetIDChecker(c *Controller, ramaClient *versioned.Clientset, cluster
 	networkList, err := ramaClient.NetworkingV1().Networks().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		runtimeutil.HandleError(err)
+		conditions = append(conditions, utils.NewOverlayNetIDNotReady(err.Error()))
 		return conditions, nil
 	}
 	var overlayNetID uint32
@@ -127,12 +129,12 @@ func OverlayNetIDChecker(c *Controller, ramaClient *versioned.Clientset, cluster
 		}
 	}
 	c.overlayNetIDMU.RLock()
-	defer c.overlayNetIDMU.Unlock()
+	defer c.overlayNetIDMU.RUnlock()
 
 	if c.OverlayNetID == nil {
-		conditions = append(conditions, utils.NewOverlayNetIDNotReady(errors.New("local cluster has no overlay network")))
+		conditions = append(conditions, utils.NewOverlayNetIDNotReady("local cluster has no overlay network"))
 	} else if *c.OverlayNetID != overlayNetID {
-		conditions = append(conditions, utils.NewOverlayNetIDNotReady(errors.New("Different overlay net id")))
+		conditions = append(conditions, utils.NewOverlayNetIDNotReady("Different overlay net id"))
 	} else {
 		conditions = append(conditions, utils.NewOverlayNetIDReady())
 	}

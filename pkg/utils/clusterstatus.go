@@ -7,24 +7,26 @@ import (
 )
 
 const (
-	TypeHealthCheck      networkingv1.ClusterConditionType = "HealthCheck"
-	TypeTwoWayConn       networkingv1.ClusterConditionType = "TwoWayConnection"
-	TypeSameOverlayNetID networkingv1.ClusterConditionType = "SameOverlayNetID"
+	TypeHealthCheck       networkingv1.ClusterConditionType = "HealthCheck"
+	TypeBidirectionalConn networkingv1.ClusterConditionType = "BidirectionalConnection"
+	TypeSameOverlayNetID  networkingv1.ClusterConditionType = "SameOverlayNetID"
 
 	ReasonClusterReady        = "ClusterReady"
+	ReasonHealthCheckReady    = "HealthCheckReady"
 	ReasonClusterNotReachable = "ClusterNotReachable"
 	ReasonClusterNotReady     = "ClusterNotReady"
+	ReasonHealthCheckNotReady = "HealthCheckNotReady"
 	ReasonClusterReachable    = "ClusterReachable"
 	ReasonDoubleConn          = "BothSetRemoteCluster"
 	ReasonNotDoubleConn       = "RemoteNotSetRemoteCluster"
 	ReasonSameOverlayNetID    = "SameOverlayNetIDReady"
 	ReasonNotSameOverlayNetID = "SameOverlayNetIDNotReady"
 
-	MsgHealthzNotOk     = "/healthz responded without ok"
-	MsgHealthzOk        = "/healthz responded with ok"
-	MsgDoubleConnOk     = "Both Clusters have created remote cluster"
-	MsgDoubleConnNotOk  = "Remote Clusters have not apply remote-cluster-cr about local cluster"
-	MsgSameOverlayNetID = "Both clusters have same overlay net id"
+	MsgHealthzNotOk           = "/healthz responded without ok"
+	MsgHealthzOk              = "/healthz responded with ok"
+	MsgBidirectionalConnOk    = "Both Clusters have created remote cluster"
+	MsgBidirectionalConnNotOk = "Remote Clusters have not apply remote-cluster-cr about local cluster"
+	MsgSameOverlayNetID       = "Both clusters have same overlay net id"
 )
 
 func NewHealthCheckReady() networkingv1.ClusterCondition {
@@ -34,32 +36,32 @@ func NewHealthCheckReady() networkingv1.ClusterCondition {
 		Status:             corev1.ConditionTrue,
 		LastProbeTime:      cur,
 		LastTransitionTime: &cur,
-		Reason:             StringPtr(ReasonClusterReady),
+		Reason:             StringPtr(ReasonHealthCheckReady),
 		Message:            StringPtr(MsgHealthzOk),
 	}
 }
 
-func NewDoubleConnReady() networkingv1.ClusterCondition {
+func NewBidirectionalConnReady() networkingv1.ClusterCondition {
 	cur := metav1.Now()
 	return networkingv1.ClusterCondition{
-		Type:               TypeTwoWayConn,
+		Type:               TypeBidirectionalConn,
 		Status:             corev1.ConditionTrue,
 		LastProbeTime:      cur,
 		LastTransitionTime: &cur,
 		Reason:             StringPtr(ReasonDoubleConn),
-		Message:            StringPtr(MsgDoubleConnOk),
+		Message:            StringPtr(MsgBidirectionalConnOk),
 	}
 }
 
-func NewDoubleConnNotReady() networkingv1.ClusterCondition {
+func NewBidirectionalConnNotReady(s string) networkingv1.ClusterCondition {
 	cur := metav1.Now()
 	return networkingv1.ClusterCondition{
-		Type:               TypeTwoWayConn,
+		Type:               TypeBidirectionalConn,
 		Status:             corev1.ConditionFalse,
 		LastProbeTime:      cur,
 		LastTransitionTime: &cur,
 		Reason:             StringPtr(ReasonNotDoubleConn),
-		Message:            StringPtr(MsgDoubleConnNotOk),
+		Message:            StringPtr(s),
 	}
 }
 
@@ -75,7 +77,7 @@ func NewOverlayNetIDReady() networkingv1.ClusterCondition {
 	}
 }
 
-func NewOverlayNetIDNotReady(err error) networkingv1.ClusterCondition {
+func NewOverlayNetIDNotReady(s string) networkingv1.ClusterCondition {
 	cur := metav1.Now()
 	return networkingv1.ClusterCondition{
 		Type:               TypeSameOverlayNetID,
@@ -83,7 +85,7 @@ func NewOverlayNetIDNotReady(err error) networkingv1.ClusterCondition {
 		LastProbeTime:      cur,
 		LastTransitionTime: &cur,
 		Reason:             StringPtr(ReasonNotSameOverlayNetID),
-		Message:            StringPtr(err.Error()),
+		Message:            StringPtr(s),
 	}
 }
 
@@ -106,7 +108,7 @@ func NewHealthCheckNotReady(err error) networkingv1.ClusterCondition {
 		Status:             corev1.ConditionFalse,
 		LastProbeTime:      cur,
 		LastTransitionTime: &cur,
-		Reason:             StringPtr(ReasonClusterNotReady),
+		Reason:             StringPtr(ReasonHealthCheckNotReady),
 		Message:            StringPtr(err.Error()),
 	}
 }

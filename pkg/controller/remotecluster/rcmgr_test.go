@@ -415,7 +415,20 @@ func TestNilClientInterface(t *testing.T) {
 	//t.Log(string(body))
 }
 
-func TestHandleError(t *testing.T ){
+func TestHandleError(t *testing.T) {
 	err := errors.New("err happened")
 	runtimeutil.HandleError(err)
+}
+
+func TestUUID(t *testing.T) {
+	config, err := clientconfig.GetConfig()
+	assert.Nil(t, err)
+	kubeClient := kubernetes.NewForConfigOrDie(config)
+	//ramaClient := versioned.NewForConfigOrDie(restclient.AddUserAgent(config, "Rama"))
+
+	ns, err := kubeClient.CoreV1().Namespaces().Get(context.TODO(), "kube-system", metav1.GetOptions{})
+	if k8serror.IsNotFound(err) {
+		t.Log("hello world")
+	}
+	t.Log(ns.UID)
 }

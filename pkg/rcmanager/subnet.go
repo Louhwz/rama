@@ -29,7 +29,9 @@ func (m *Manager) reconcileSubnet(key string) error {
 		if k8serror.IsNotFound(err) {
 			name := utils.GenRemoteSubnetName(m.ClusterName, key)
 			err = m.localClusterRamaClient.NetworkingV1().RemoteSubnets().Delete(context.TODO(), name, metav1.DeleteOptions{})
-			return err
+			if k8serror.IsNotFound(err) {
+				return nil
+			}
 		}
 		return err
 	}
@@ -219,7 +221,7 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet, networ
 					APIVersion: networkingv1.SchemeGroupVersion.String(),
 					Kind:       "RemoteCluster",
 					Name:       m.ClusterName,
-					UID:        m.UID,
+					UID:        m.UUID,
 					Controller: pointer.BoolPtr(true),
 				},
 			},
