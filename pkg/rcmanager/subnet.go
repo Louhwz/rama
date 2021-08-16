@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"time"
 
 	networkingv1 "github.com/oecp/rama/pkg/apis/networking/v1"
 	"github.com/oecp/rama/pkg/constants"
@@ -231,9 +230,6 @@ func (m *Manager) convertSubnet2RemoteSubnet(subnet *networkingv1.Subnet, networ
 			Type:        network.Spec.Type,
 			ClusterName: m.ClusterName,
 			TunnelNetID: network.Spec.NetID,
-		},
-		Status: networkingv1.RemoteSubnetStatus{
-			LastModifyTime: metav1.NewTime(time.Now()),
 		},
 	}
 	return rs, nil
