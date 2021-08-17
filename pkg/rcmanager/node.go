@@ -194,8 +194,8 @@ func (m *Manager) updateNode(oldObj, newObj interface{}) {
 	if newNodeAnnotations[constants.AnnotationNodeVtepIP] == "" || newNodeAnnotations[constants.AnnotationNodeVtepMac] == "" {
 		return
 	}
-	if newNodeAnnotations[constants.AnnotationNodeVtepIP] == oldNodeAnnotations[constants.AnnotationIP] &&
-		newNodeAnnotations[constants.AnnotationNodeVtepIP] == oldNodeAnnotations[constants.AnnotationNodeVtepMac] {
+	if newNodeAnnotations[constants.AnnotationNodeVtepIP] == oldNodeAnnotations[constants.AnnotationNodeVtepIP] &&
+		newNodeAnnotations[constants.AnnotationNodeVtepMac] == oldNodeAnnotations[constants.AnnotationNodeVtepMac] {
 		return
 	}
 	m.enqueueNode(newNode.Name)
