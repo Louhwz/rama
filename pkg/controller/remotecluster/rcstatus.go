@@ -19,16 +19,16 @@ import (
 type CheckStatusFunc func(c *Controller, rcRamaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error)
 
 var (
-	InitializeChecker []CheckStatusFunc
-	AllReady          = make(map[networkingv1.ClusterConditionType]bool)
+	DefaultChecker    []CheckStatusFunc
+	ConditionAllReady = make(map[networkingv1.ClusterConditionType]bool)
 )
 
 func init() {
-	InitializeChecker = append(InitializeChecker, HealChecker, BidirectionalConnChecker, OverlayNetIDChecker)
+	DefaultChecker = append(DefaultChecker, HealChecker, BidirectionalConnChecker, OverlayNetIDChecker)
 
-	AllReady[utils.TypeHealthCheck] = true
-	AllReady[utils.TypeBidirectionalConn] = true
-	AllReady[utils.TypeSameOverlayNetID] = true
+	ConditionAllReady[utils.TypeHealthCheck] = true
+	ConditionAllReady[utils.TypeBidirectionalConn] = true
+	ConditionAllReady[utils.TypeSameOverlayNetID] = true
 }
 
 func CheckCondition(c *Controller, ramaClient *versioned.Clientset, clusterName string,
@@ -58,13 +58,13 @@ func IsReady(conditions []networkingv1.ClusterCondition) bool {
 func meetCondition(conditions []networkingv1.ClusterCondition) bool {
 	cnt := 0
 	for _, c := range conditions {
-		if _, exists := AllReady[c.Type]; exists {
+		if _, exists := ConditionAllReady[c.Type]; exists {
 			if c.Status == apiv1.ConditionTrue {
 				cnt = cnt + 1
 			}
 		}
 	}
-	if cnt == len(AllReady) {
+	if cnt == len(ConditionAllReady) {
 		return true
 	}
 	return false
@@ -73,7 +73,7 @@ func meetCondition(conditions []networkingv1.ClusterCondition) bool {
 func HealChecker(c *Controller, ramaClient *versioned.Clientset, clusterName string) ([]networkingv1.ClusterCondition, error) {
 	conditions := make([]networkingv1.ClusterCondition, 0)
 
-	body, err := ramaClient.DiscoveryClient.RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
+	body, err := ramaClient.Discovery().RESTClient().Get().AbsPath("/healthz").Do(context.TODO()).Raw()
 	if err != nil {
 		runtimeutil.HandleError(errors.Wrapf(err, "Cluster Health Check failed for cluster %v", clusterName))
 		conditions = append(conditions, utils.NewClusterOffline(err))
